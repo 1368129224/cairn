@@ -54,6 +54,29 @@ public struct PendingTrashIntent: Codable, Sendable, Hashable {
     public var checksums: Set<Checksum> {
         Set(assets.map(\.checksum))
     }
+
+    /// The Immich server's rejection message when a tag value already
+    /// exists. Builds through 0.4.3 created run breadcrumbs with
+    /// `POST /api/tags`, which is create-only — so any run that
+    /// committed its tag and then failed later re-sent the same value on
+    /// every retry and got this back, forever. Matched as a substring
+    /// because `lastError` wraps it in the HTTP-status envelope
+    /// `describeSyncError` builds.
+    public static let tagAlreadyExistsMessage = "A tag with that name already exists"
+
+    /// True when this intent's last failure was the create-only-tag
+    /// conflict above — a permanent wedge under the old `POST` path that
+    /// retrying could never clear, and which the switch to
+    /// `PUT /api/tags` fixes. Hosts use this to identify the intents
+    /// worth resetting the attempt counter on, so they drain on the next
+    /// sync instead of waiting for a manual "Retry all now" tap.
+    ///
+    /// Intents that failed for any other reason (server down, key
+    /// rotated) are deliberately excluded: those hit the retry cap
+    /// legitimately and shouldn't be silently rearmed.
+    public var isWedgedOnTagCreateConflict: Bool {
+        lastError?.contains(Self.tagAlreadyExistsMessage) == true
+    }
 }
 
 /// Persistent queue of trash intents that failed and want retrying.

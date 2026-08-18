@@ -739,6 +739,51 @@ final class AppDependencies {
             UserDefaults.standard.set(true, forKey: autoTrashMigrationKey)
         }
 
+        // One-time retry-queue unwedge for the tag-upsert 400. Builds
+        // through 0.4.3 wrote run breadcrumbs with `POST /api/tags`,
+        // which is create-only: a run that committed its tag and then
+        // failed at a later step re-sent the same tag value on every
+        // retry, got HTTP 400 "A tag with that name already exists"
+        // every time, burned through `maxRetryAttempts`, and parked in
+        // the queue permanently. `upsertTag` now uses the real upsert
+        // (`PUT /api/tags`), so those intents can finally succeed — but
+        // `drainPendingTrashes` skips anything at or over the cap unless
+        // `force: true`, which only the manual "Retry all now" button
+        // passes. Without this reset the queue stays wedged after the
+        // update until the user goes looking for that button.
+        //
+        // `lastAttemptedAt` is backdated rather than stamped `now` so the
+        // 60s anti-hammer debounce in `drainPendingTrashes` doesn't skip
+        // these on that very next sync. It isn't surfaced in the UI.
+        // `lastError` is cleared because the message it holds describes a
+        // failure mode this build removed — leaving it would show a
+        // stale, alarming error on a row that's about to succeed.
+        //
+        // Scoped per partition: retry queues are per-(URL, userId), so a
+        // single global flag would sweep whichever account happened to
+        // boot first and silently skip every other one.
+        if let partitionName = currentPartitionKey?.directoryName,
+           let pendingStore = pendingTrashStore {
+            let tagWedgeMigrationKey = "cairn.migration.tag_upsert_retry_reset_v1.\(partitionName)"
+            if !UserDefaults.standard.bool(forKey: tagWedgeMigrationKey) {
+                let wedged = ((try? await pendingStore.snapshot()) ?? [])
+                    .filter(\.isWedgedOnTagCreateConflict)
+                for intent in wedged {
+                    try? await pendingStore.update(
+                        intent.id,
+                        lastAttemptedAt: .distantPast,
+                        attemptCount: 0,
+                        lastError: nil
+                    )
+                }
+                if !wedged.isEmpty {
+                    syncLog.notice("[cairn.migration] rearmed \(wedged.count) trash retry intent(s) wedged on the tag-create 400 — they drain on the next sync")
+                    await self.refreshPendingTrashCount()
+                }
+                UserDefaults.standard.set(true, forKey: tagWedgeMigrationKey)
+            }
+        }
+
         // Start the persistent diagnostic-log flusher only if the user has
         // opted in. Off by default, so the 20s OSLog poll + rolling-file
         // writes don't run on every launch — they're for active bug

@@ -32,6 +32,36 @@ struct JSONFilePendingTrashIntentStoreTests {
         )
     }
 
+    @Test("isWedgedOnTagCreateConflict matches the server's tag-conflict 400 inside the HTTP envelope")
+    func wedgeDetectionMatchesTagConflict() {
+        // Exactly the string `describeSyncError` builds for this failure:
+        // the status envelope wrapping the server's JSON body.
+        var i = intent(assets: [asset("A", ck: "ck-A")])
+        i.lastError = #"Immich returned HTTP 400: {"message":"A tag with that name already exists"}"#
+        #expect(i.isWedgedOnTagCreateConflict)
+    }
+
+    @Test("isWedgedOnTagCreateConflict ignores unrelated failures and never-attempted intents")
+    func wedgeDetectionIgnoresOtherFailures() {
+        // These hit the retry cap legitimately — rearming them would
+        // re-run a request the server is still going to reject.
+        var offline = intent(assets: [asset("A", ck: "ck-A")])
+        offline.lastError = "No internet connection. cairn will retry when you're back online."
+        #expect(!offline.isWedgedOnTagCreateConflict)
+
+        var badKey = intent(assets: [asset("A", ck: "ck-A")])
+        badKey.lastError = "Immich rejected the API key (HTTP 401). Try re-verifying in Settings."
+        #expect(!badKey.isWedgedOnTagCreateConflict)
+
+        // A different 400 must not match on the status code alone.
+        var otherBadRequest = intent(assets: [asset("A", ck: "ck-A")])
+        otherBadRequest.lastError = #"Immich returned HTTP 400: {"message":"Tag not found"}"#
+        #expect(!otherBadRequest.isWedgedOnTagCreateConflict)
+
+        // Freshly enqueued, never attempted.
+        #expect(!intent(assets: [asset("A", ck: "ck-A")]).isWedgedOnTagCreateConflict)
+    }
+
     @Test("missing file reads as empty")
     func missingReadsEmpty() async throws {
         let store = JSONFilePendingTrashIntentStore(path: tempPath())
