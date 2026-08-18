@@ -1,13 +1,11 @@
-0.4.3 (build 147) — automatic trashing (opt-in), and a quarantine fix.
+0.4.4 (build 148) — fixes trash requests that got permanently stuck.
 
-Big one this build: cairn can now move deletions to Immich's Trash automatically, without a manual "Trash all" tap. This is OPT-IN and gated by your safety limits.
+If a trash run failed partway through — server unreachable, connection dropped mid-run, VPN down — every later retry failed with "Immich returned HTTP 400: A tag with that name already exists", and the request sat in the queue for good. No amount of retrying could clear it.
 
-- Please check Settings → Safety & limits → Deletion strictness. If you were on Balanced or Autonomous, this build resets you to Cautious (manual) one time — because no previous version ever auto-deleted, we don't want to switch anyone into automatic deletion silently. Re-select Balanced or Autonomous to turn auto-trashing on.
-- Cautious (the new default): nothing is trashed automatically — deletions wait as "Ready to trash" for you to confirm.
-- Balanced: past-quarantine deletions are trashed automatically on the next sync.
-- Autonomous: deletions are trashed automatically with no quarantine wait.
-- In all cases it's gated by your percent + count safety limits: a run that would exceed them (or a first sync) is NOT auto-deleted — it's left for you to review. Everything goes to Immich's Trash (30-day recovery), and auto-trash runs on background refresh too.
+The cause was on cairn's side. Every trash run writes a breadcrumb tag to Immich so the run can be reconstructed later, and cairn was creating those tags with an endpoint that rejects duplicates instead of the one that reuses an existing tag. Since a retry reuses its original run's tag, the second attempt was refused every time.
 
-Also fixed: trashing the "Ready to trash" list no longer makes the quarantine banner disappear until the next sync — it now stays accurate immediately.
+- Trash retries now reuse the run's existing tag rather than failing on it.
+- Requests already stuck on this error are cleared when you update — they run on your next sync, no tap needed.
+- Run breadcrumbs now nest under cairn / v1 / run in Immich's tag list instead of sitting there as one flat entry.
 
-To test: confirm your strictness is Cautious after updating. Then, if you want auto-trash, set Balanced or Autonomous, delete a few photos on your phone, and after the quarantine window (or immediately, for Autonomous) confirm they move to Immich's Trash on the next sync without a tap. Try a large deletion to confirm the safety limit still holds it back for manual review.
+To test: after updating, open Status → Pending trashes. If you had a stuck request, it should drain on the next sync on its own — you shouldn't need "Retry all now". Confirm the photos actually reached Immich's Trash. To exercise the original failure path, drop your server or VPN mid-sync so a trash run fails, bring it back, and check that the queued request drains on the following sync instead of wedging.
