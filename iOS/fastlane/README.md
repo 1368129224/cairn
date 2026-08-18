@@ -112,6 +112,19 @@ Push App Store listing metadata + screenshots without rebuilding
 
 Upload to App Store
 
+### ios submit
+
+```sh
+[bundle exec] fastlane ios submit
+```
+
+Submit the already-uploaded build for App Store review — end-to-end via fastlane.
+Pushes metadata (incl. metadata/en-US/release_notes.txt = the "What's New" field),
+attaches the latest uploaded build for this marketing version, and submits for review.
+Run AFTER `make beta` has uploaded the release build.
+Usage: bundle exec fastlane submit            # submit, release manually after approval
+       bundle exec fastlane submit auto_release:true   # auto-release once approved
+
 ### ios screenshots
 
 ```sh
