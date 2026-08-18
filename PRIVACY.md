@@ -37,7 +37,7 @@ Only requests to your configured Immich server, signed with your API key:
 
 - `POST /api/search/metadata` — list assets and their checksums.
 - `GET /api/assets/statistics` — fast count endpoint.
-- `POST /api/tags` + `PUT /api/tags/assets` — write run breadcrumbs.
+- `PUT /api/tags` + `PUT /api/tags/assets` — write run breadcrumbs.
 - `DELETE /api/assets` with `force: false` — move asset(s) to your Immich Trash (not permanent deletion).
 - `POST /api/trash/restore/assets` — undo.
 - `GET /api/thumbnail/<id>` — fetch thumbnails for the candidate review UI.

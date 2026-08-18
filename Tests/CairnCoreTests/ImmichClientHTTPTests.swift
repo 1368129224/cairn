@@ -300,6 +300,104 @@ struct ImmichClientHTTPTests {
         #expect(json["force"] == nil)
     }
 
+    @Test("upsertTag PUTs /api/tags with a tags array and returns the leaf tag")
+    func upsertTagUsesPutUpsertEndpoint() async throws {
+        let (client, mock) = makeClient()
+        let seenMethod = Ref<String?>(nil)
+        let seenPath = Ref<String?>(nil)
+        let seenBody = Ref<Data>(Data())
+        mock.handler = { req in
+            seenMethod.value = req.httpMethod
+            seenPath.value = req.url?.path
+            seenBody.value = req.readBody()
+            // The server upserts every path segment and echoes the whole
+            // chain, leaf last.
+            let json = """
+            [
+              {"id":"t-root","value":"cairn"},
+              {"id":"t-v1","value":"cairn/v1"},
+              {"id":"t-run","value":"cairn/v1/run"},
+              {"id":"t-leaf","value":"cairn/v1/run/abc","createdAt":"2026-04-21T00:00:00.000Z"}
+            ]
+            """
+            return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(json.utf8))
+        }
+        let tag = try await client.upsertTag(value: "cairn/v1/run/abc")
+
+        // `POST /api/tags` is create-only on the server and 400s on a
+        // duplicate value; only `PUT` is the upsert.
+        #expect(seenMethod.value == "PUT")
+        #expect(seenPath.value == "/api/tags")
+        let json = try JSONSerialization.jsonObject(with: seenBody.value) as! [String: Any]
+        #expect(json["tags"] as? [String] == ["cairn/v1/run/abc"])
+        #expect(json["name"] == nil)
+
+        // The leaf, not the first element (a parent) the server returned.
+        #expect(tag.id == "t-leaf")
+        #expect(tag.value == "cairn/v1/run/abc")
+        #expect(tag.createdAt != nil)
+    }
+
+    @Test("upsertTag is idempotent — a repeated value returns the existing tag instead of throwing")
+    func upsertTagIsIdempotentAcrossRetries() async throws {
+        // Regression: queued `PendingTrashIntent`s reuse their `runId`, so
+        // every retry rebuilds the same tag value. Against `POST /api/tags`
+        // the second call 400'd with "A tag with that name already exists"
+        // and the intent could never drain.
+        let (client, mock) = makeClient()
+        let existing = Ref<[String: String]>([:])
+        let callCount = Ref<Int>(0)
+        mock.handler = { req in
+            callCount.mutate { $0 += 1 }
+            let body = try! JSONSerialization.jsonObject(with: req.readBody()) as! [String: Any]
+            let values = body["tags"] as! [String]
+
+            // Stand-in for the server's ON CONFLICT DO UPDATE: same value
+            // in, same id out. A create-only endpoint would 400 here.
+            guard req.httpMethod == "PUT" else {
+                return (HTTPURLResponse(url: req.url!, statusCode: 400, httpVersion: nil, headerFields: nil)!,
+                        Data(#"{"message":"A tag with that name already exists"}"#.utf8))
+            }
+            var rows: [String] = []
+            for value in values {
+                var id = ""
+                existing.mutate {
+                    if let known = $0[value] {
+                        id = known
+                    } else {
+                        id = "t\($0.count + 1)"
+                        $0[value] = id
+                    }
+                }
+                rows.append(#"{"id":"\#(id)","value":"\#(value)"}"#)
+            }
+            return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data("[\(rows.joined(separator: ","))]".utf8))
+        }
+
+        let first = try await client.upsertTag(value: "cairn/v1/run/abc")
+        let second = try await client.upsertTag(value: "cairn/v1/run/abc")
+        #expect(callCount.value == 2)
+        #expect(first.id == second.id)
+        #expect(second.value == "cairn/v1/run/abc")
+    }
+
+    @Test("upsertTag throws when the response omits the requested value")
+    func upsertTagRejectsResponseWithoutLeaf() async throws {
+        let (client, mock) = makeClient()
+        mock.handler = { req in
+            // Parents only — tagging against one of these would stamp the
+            // wrong breadcrumb on every asset in the run.
+            let json = #"[{"id":"t-run","value":"cairn/v1/run"}]"#
+            return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(json.utf8))
+        }
+        await #expect(throws: ImmichClientError.self) {
+            _ = try await client.upsertTag(value: "cairn/v1/run/abc")
+        }
+    }
+
     @Test("listTags GETs /api/tags and parses the response array")
     func listTagsParsesArray() async throws {
         let (client, mock) = makeClient()

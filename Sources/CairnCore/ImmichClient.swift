@@ -516,14 +516,39 @@ public struct ImmichClient: Sendable {
 
     // MARK: - Tags (breadcrumbs)
 
-    /// `POST /api/tags` — upsert-by-value. Returning an existing tag
-    /// when the name matches lets trash runs safely call this without a
+    /// `PUT /api/tags` — upsert-by-value. Returning an existing tag when
+    /// the value matches lets trash runs safely call this without a
     /// lookup-then-create race. cairn uses tags named
     /// `cairn/v1/run/<run_id>` as per-run breadcrumbs on the server.
+    ///
+    /// Deliberately **not** `POST /api/tags`: despite the symmetry, that
+    /// endpoint is create-only and rejects a duplicate value with HTTP
+    /// 400 `{"message":"A tag with that name already exists"}`. Since a
+    /// queued `PendingTrashIntent` reuses its `runId` across attempts,
+    /// every retry rebuilds the same tag value — so a run that got past
+    /// tag creation and failed later would 400 forever on POST. `PUT`
+    /// maps to the server's `upsertTags`, an `ON CONFLICT DO UPDATE`,
+    /// and is gated on the same `tag.create` permission, so this needs
+    /// no extra API-key scope. It also builds the `cairn` → `v1` →
+    /// `run` parent chain, which the flat `POST` path never did.
+    ///
+    /// The server upserts each path segment and returns one tag per
+    /// requested value — the leaf. Match on `value` rather than trusting
+    /// position, and treat a response that somehow omits the leaf as an
+    /// unexpected response rather than silently tagging against a parent.
     public func upsertTag(value: String) async throws -> ImmichTag {
-        let body: [String: Any] = ["name": value]
-        let dto: TagDTO = try await postJSON(path: "tags", jsonObject: body)
-        return dto.asImmichTag
+        var req = try makeRequest(method: "PUT", path: "tags")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["tags": [value]])
+        let (data, resp) = try await session.data(for: req)
+        try Self.expectOK(resp, data: data)
+        let dtos = try JSONDecoder().decode([TagDTO].self, from: data)
+        guard let leaf = dtos.first(where: { $0.value == value }) else {
+            throw ImmichClientError.unexpectedResponse(
+                "PUT /api/tags returned no tag matching \(value)"
+            )
+        }
+        return leaf.asImmichTag
     }
 
     /// `GET /api/tags` — every tag visible to the API key's user.

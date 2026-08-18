@@ -207,7 +207,8 @@ product UI.
     iOS just supplies inputs.
 - **API calls.** All journal entries are made-up. Real endpoints (verified
   against an Immich instance, Apr 2026):
-  - `POST /api/tags` — upsert by name (create-or-return-existing).
+  - `PUT /api/tags` — upsert by value (create-or-return-existing).
+    `POST /api/tags` is create-only and 400s on duplicates.
   - `PUT /api/tags/assets` — bulk-tag (note path: plural assets, no tag
     ID in URL; tag IDs in body).
   - `DELETE /api/assets` with `{ids: [...], force: false}` — trash.

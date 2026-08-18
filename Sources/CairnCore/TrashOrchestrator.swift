@@ -6,7 +6,8 @@ import Foundation
 /// substitute deterministic fakes.
 public protocol ImmichWriter: Sendable {
     /// Create a tag (or return the existing one) for the given canonical value.
-    /// Calls `POST /api/tags`.
+    /// Calls `PUT /api/tags` — the server's upsert. Must be idempotent:
+    /// retried runs reuse their `runId`, so the same value arrives again.
     func upsertTag(value: String) async throws -> ImmichTag
     /// Attach `tagIds` to every asset in `assetIds`. Calls `PUT /api/tags/assets`.
     func bulkTagAssets(tagIds: [String], assetIds: [String]) async throws

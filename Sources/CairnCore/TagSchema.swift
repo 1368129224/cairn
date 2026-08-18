@@ -24,7 +24,7 @@ public enum TagSchema {
     public static let runCategory = "run"
 
     /// Build the full tag value for a given `runId`. This is the string
-    /// handed to `POST /api/tags` and later queried by `cairn history`.
+    /// handed to `PUT /api/tags` and later queried by `cairn history`.
     public static func runTagValue(runId: String) -> String {
         "\(root)/\(version)/\(runCategory)/\(runId)"
     }

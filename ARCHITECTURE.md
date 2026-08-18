@@ -214,7 +214,11 @@ All auth via `x-api-key` header.
 - `DELETE /api/assets` with `{ ids:[...], force: false }` → trash (not hard-delete). Plural path.
 - `POST /api/search/metadata` (paginated) → lists assets including `checksum`. Default visibility excludes `hidden`; pass `visibility` to filter explicitly. To get all visibilities, iterate.
 - `POST /api/trash/restore/assets` with `{ ids:[...] }` → restore.
-- `POST /api/tags` → upsert tag by name.
+- `PUT /api/tags` with `{ tags:[...] }` → upsert tags by value; creates
+  each missing path segment and returns one tag per requested value.
+  Note this is **not** `POST /api/tags`, which is create-only and 400s
+  with "A tag with that name already exists" on a duplicate value —
+  fatal for retries, which reuse their run's tag value.
 - `PUT /api/tags/assets` → bulk-tag assets.
 - `GET /api/tags` → list tags (needs `tag.read`).
 - `POST /api/sync/stream` → JSONL change-event stream. **Unreachable
