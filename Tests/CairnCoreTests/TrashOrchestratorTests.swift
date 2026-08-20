@@ -397,4 +397,35 @@ struct TrashOrchestratorTests {
         #expect(!events.contains("trashSucceeded"))
         #expect(!events.contains("runCompleted"))
     }
+
+    @Test("abortReason renders a cancelled request in plain language, not an NSError dump")
+    func abortReasonForCancellation() {
+        // -999 is what iOS produces when it suspends a background
+        // refresh mid-request. `String(describing:)` on this renders the
+        // entire userInfo dictionary (failing URL, session task pointer,
+        // related-task array), which the run-detail sheet then showed the
+        // user verbatim.
+        let cancelled = URLError(.cancelled)
+        let reason = TrashOrchestrator.abortReason(for: cancelled)
+        #expect(reason == "interrupted before it finished (request cancelled)")
+        #expect(!reason.contains("NSError"))
+        #expect(!reason.lowercased().contains("userinfo"))
+
+        #expect(TrashOrchestrator.abortReason(for: CancellationError()) == "interrupted before it finished")
+    }
+
+    @Test("abortReason maps the common transport failures and falls back for the rest")
+    func abortReasonForOtherErrors() {
+        #expect(TrashOrchestrator.abortReason(for: URLError(.timedOut)) == "the server took too long to respond")
+        #expect(TrashOrchestrator.abortReason(for: URLError(.notConnectedToInternet)) == "lost the network connection")
+        #expect(TrashOrchestrator.abortReason(for: URLError(.cannotFindHost)) == "couldn't find the server")
+
+        // ImmichClientError already has a curated description — reuse it
+        // rather than re-deriving one here.
+        let http = ImmichClientError.httpStatus(400, body: "nope")
+        #expect(TrashOrchestrator.abortReason(for: http) == http.description)
+
+        struct Weird: Swift.Error {}
+        #expect(TrashOrchestrator.abortReason(for: Weird()).hasPrefix("unexpected failure:"))
+    }
 }

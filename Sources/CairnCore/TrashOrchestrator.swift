@@ -278,10 +278,52 @@ public struct TrashOrchestrator: Sendable {
                 try? await journal.append(.init(
                     timestamp: now(),
                     runId: runId,
-                    event: .runAborted(reason: "unexpected failure: \(error)")
+                    event: .runAborted(reason: Self.abortReason(for: error))
                 ))
             }
             throw error
         }
+    }
+
+    /// Human-readable one-liner for the `runAborted` journal event.
+    ///
+    /// The default `String(describing:)` on a `URLError` renders the
+    /// whole `NSError` userInfo dictionary — failing URL, session task
+    /// pointer, related-task array — which is what the run-detail sheet
+    /// then shows the user verbatim. Nobody can read that. Special-case
+    /// the errors we actually see and keep the raw description only as a
+    /// last resort, where it's better than nothing.
+    ///
+    /// Deliberately kept in CairnCore rather than reusing the iOS app's
+    /// `describeSyncError`: the journal is written by the CLI too, and
+    /// this string is persisted to disk, so it has to be stable and
+    /// host-independent.
+    static func abortReason(for error: Swift.Error) -> String {
+        if error is CancellationError {
+            return "interrupted before it finished"
+        }
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .cancelled:
+                // iOS suspending a background refresh mid-request is the
+                // common source. Not a server rejection, and the run is
+                // safe to retry as-is.
+                return "interrupted before it finished (request cancelled)"
+            case .notConnectedToInternet, .networkConnectionLost:
+                return "lost the network connection"
+            case .timedOut:
+                return "the server took too long to respond"
+            case .cannotFindHost, .dnsLookupFailed:
+                return "couldn't find the server"
+            case .cannotConnectToHost:
+                return "couldn't reach the server"
+            default:
+                return "network error (\(urlError.code.rawValue))"
+            }
+        }
+        if let clientError = error as? ImmichClientError {
+            return clientError.description
+        }
+        return "unexpected failure: \(error)"
     }
 }
