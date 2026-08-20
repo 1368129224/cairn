@@ -210,7 +210,13 @@ public enum JournalReader {
                 if firstRunStartedCandidateCount == nil {
                     firstRunStartedCandidateCount = candidateCount
                 }
-                if runStartedAt == nil { runStartedAt = entry.timestamp }
+                // Last-wins, not first-wins: a queued `PendingTrashIntent`
+                // reuses its `runId` across retries, so one run accumulates
+                // a `runStarted` per attempt. Duration should describe the
+                // most recent attempt — anchoring to the first one measured
+                // the wall-clock gap between the original failure and the
+                // final retry (days, for a queue that sat wedged).
+                runStartedAt = entry.timestamp
             case .runCompleted:
                 sawRunCompleted = true
                 runCompletedAt = entry.timestamp
@@ -276,6 +282,14 @@ public enum JournalReader {
         let durationMs: Int = {
             func diff(_ start: Date?, _ end: Date?) -> Int {
                 guard let s = start, let e = end else { return 0 }
+                // Clamp rather than report a negative span. The end
+                // markers are last-wins while `runStartedAt` now tracks
+                // the latest attempt, so a run whose final attempt
+                // succeeded but whose status still resolves to an
+                // earlier phase's outcome can pair a later start with an
+                // earlier end. Zero reads as "unknown" — the UI hides
+                // any duration that isn't positive.
+                guard e >= s else { return 0 }
                 return Int((e.timeIntervalSince(s) * 1000).rounded())
             }
             switch status {

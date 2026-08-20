@@ -171,6 +171,44 @@ struct JournalReaderTests {
         #expect(s.notes.hasPrefix("aborted · "))
     }
 
+    @Test("durationMs measures the latest retry attempt, not the span across all of them")
+    func durationMsAcrossRetryAttempts() {
+        // Real shape from a wedged queue: the intent reuses its runId, so
+        // one run accumulates a runStarted/runAborted pair per attempt,
+        // days apart. Anchoring to the first runStarted reported the gap
+        // between the original failure and the last retry — a ~13-day
+        // "duration" on a run that only ever ran for seconds.
+        let es = [
+            entry("R1", "2026-08-05T21:47:00Z", .runStarted(dryRun: false, candidateCount: 6, assetsInPurview: 100)),
+            entry("R1", "2026-08-05T21:47:04Z", .runAborted(reason: "interrupted before it finished (request cancelled)")),
+            entry("R1", "2026-08-12T09:00:00Z", .runStarted(dryRun: false, candidateCount: 6, assetsInPurview: 100)),
+            entry("R1", "2026-08-12T09:00:02Z", .runAborted(reason: "Immich returned HTTP 400")),
+            entry("R1", "2026-08-18T14:30:00Z", .runStarted(dryRun: false, candidateCount: 6, assetsInPurview: 100)),
+            entry("R1", "2026-08-18T14:30:03Z", .runAborted(reason: "Immich returned HTTP 400")),
+        ]
+        let s = JournalReader.summarize(es)[0]
+        #expect(s.status == .aborted)
+        #expect(s.durationMs == 3000)  // the last attempt only
+    }
+
+    @Test("durationMs never goes negative when a later attempt outlives the status-setting event")
+    func durationMsNeverNegative() {
+        // Aborted on attempt 1, succeeded on attempt 2. `sawAborted`
+        // still wins the status precedence, so the .aborted branch pairs
+        // attempt 2's start with attempt 1's abort — which is backwards.
+        // Clamped to 0 ("unknown"), which the UI hides, rather than
+        // rendering a negative duration.
+        let es = [
+            entry("R1", "2026-08-05T21:47:00Z", .runStarted(dryRun: false, candidateCount: 1, assetsInPurview: 10)),
+            entry("R1", "2026-08-05T21:47:04Z", .runAborted(reason: "interrupted")),
+            entry("R1", "2026-08-06T10:00:00Z", .runStarted(dryRun: false, candidateCount: 1, assetsInPurview: 10)),
+            entry("R1", "2026-08-06T10:00:02Z", .trashSucceeded(assetIds: ["a"], durationMs: nil)),
+            entry("R1", "2026-08-06T10:00:03Z", .runCompleted(deletedCount: 1)),
+        ]
+        let s = JournalReader.summarize(es)[0]
+        #expect(s.durationMs >= 0)
+    }
+
     @Test("durationMs is last timestamp minus first, in ms")
     func durationMsBasic() {
         let es = [
