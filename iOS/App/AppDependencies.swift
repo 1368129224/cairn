@@ -3400,17 +3400,28 @@ final class AppDependencies {
         let cap = await self.model.settings.maxRetryAttempts
         let now = Date()
         let orchestrator = TrashOrchestrator(writer: client, journal: journal)
+        syncLog.notice("[cairn.trashqueue] drain starting: \(intents.count) intent(s), force=\(force), cap=\(cap)")
+        var attempted = 0, succeeded = 0, dropped = 0, failed = 0, skipped = 0
         for intent in intents {
+            let runTag = intent.runId.prefix(8)
             // Skip stuck intents in the auto-drain path; the manual
             // Retry-now button passes force=true to override.
-            if !force, intent.attemptCount >= cap { continue }
+            if !force, intent.attemptCount >= cap {
+                skipped += 1
+                syncLog.notice("[cairn.trashqueue] run=\(runTag, privacy: .public) skipped: stuck at \(intent.attemptCount)/\(cap) attempts (needs manual Retry now)")
+                continue
+            }
             // Debounce: don't hammer a server that just rejected us a
             // moment ago. 60s is enough to clear a transient blip
             // (DNS, 502, brief restart) without making the queue feel
             // dead between syncs.
             if let last = intent.lastAttemptedAt, now.timeIntervalSince(last) < 60, !force {
+                skipped += 1
+                syncLog.notice("[cairn.trashqueue] run=\(runTag, privacy: .public) skipped: last attempt \(Int(now.timeIntervalSince(last)))s ago, under the 60s debounce")
                 continue
             }
+            attempted += 1
+            let started = Date()
             do {
                 _ = try await orchestrator.run(
                     runId: intent.runId,
@@ -3419,13 +3430,19 @@ final class AppDependencies {
                     dryRun: false
                 )
                 try? await store.remove(intent.id)
+                succeeded += 1
+                syncLog.notice("[cairn.trashqueue] run=\(runTag, privacy: .public) succeeded on attempt \(intent.attemptCount + 1) in \(Int(Date().timeIntervalSince(started) * 1000))ms — \(intent.assets.count) asset(s), removed from queue")
             } catch let e as ImmichClientError {
                 if case .httpStatus(let code, _) = e, code == 404 {
                     // The assets are no longer on the server — drop
                     // the intent rather than retrying forever.
                     try? await store.remove(intent.id)
+                    dropped += 1
+                    syncLog.notice("[cairn.trashqueue] run=\(runTag, privacy: .public) dropped: assets are gone from the server (HTTP 404)")
                 } else {
+                    failed += 1
                     let msg = Self.describeSyncError(e)
+                    syncLog.error("[cairn.trashqueue] run=\(runTag, privacy: .public) failed, attempt \(intent.attemptCount + 1)/\(cap): \(msg, privacy: .public)")
                     try? await store.update(
                         intent.id,
                         lastAttemptedAt: now,
@@ -3434,15 +3451,32 @@ final class AppDependencies {
                     )
                 }
             } catch {
+                failed += 1
                 let msg = Self.describeSyncError(error)
+                // An interruption is not a rejection. iOS suspending a
+                // background refresh cancels the in-flight request, and
+                // charging that to the retry budget is how a queue burns
+                // through `maxRetryAttempts` without the server ever
+                // having refused anything — the intent then parks as
+                // "stuck" and needs a manual tap to move again. Record
+                // the attempt time (so the debounce still applies) but
+                // leave `attemptCount` alone.
+                let interrupted = (error as? URLError)?.code == .cancelled || error is CancellationError
+                let nextCount = interrupted ? intent.attemptCount : intent.attemptCount + 1
+                if interrupted {
+                    syncLog.notice("[cairn.trashqueue] run=\(runTag, privacy: .public) interrupted (not counted against the \(cap)-attempt budget, still at \(intent.attemptCount)): \(msg, privacy: .public)")
+                } else {
+                    syncLog.error("[cairn.trashqueue] run=\(runTag, privacy: .public) failed, attempt \(nextCount)/\(cap): \(msg, privacy: .public)")
+                }
                 try? await store.update(
                     intent.id,
                     lastAttemptedAt: now,
-                    attemptCount: intent.attemptCount + 1,
+                    attemptCount: nextCount,
                     lastError: msg
                 )
             }
         }
+        syncLog.notice("[cairn.trashqueue] drain finished: attempted=\(attempted) succeeded=\(succeeded) dropped=\(dropped) failed=\(failed) skipped=\(skipped)")
         await self.refreshPendingTrashCount()
         await self.refreshRunsList()
         await self.refreshJournalTail()
@@ -4239,6 +4273,12 @@ final class AppDependencies {
         // produces is the worst error message a user is likely to see.
         if let e = error as? URLError {
             switch e.code {
+            case .cancelled:
+                // -999. Almost always iOS suspending a background
+                // refresh mid-request, not anything the server did.
+                // Without this case it fell through to the generic
+                // branch and rendered the whole NSError userInfo dump.
+                return "The request was interrupted before it finished. cairn will retry it on the next sync."
             case .notConnectedToInternet, .networkConnectionLost:
                 return "No internet connection. cairn will retry when you're back online."
             case .timedOut:
