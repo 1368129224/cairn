@@ -32,6 +32,41 @@ struct JSONFilePendingTrashIntentStoreTests {
         )
     }
 
+    @Test("reconcile drops an intent whose assets have all left the server")
+    func reconcileAllGone() {
+        // Immich answers "unknown id" with a single 400 covering the
+        // whole batch, so a queued request referencing deleted assets can
+        // never succeed — it has to leave the queue rather than retry
+        // until it wedges.
+        let i = intent(assets: [asset("A", ck: "ck-A"), asset("B", ck: "ck-B")])
+        #expect(i.reconcile(againstLiveAssetIds: []) == .allGone)
+        #expect(i.reconcile(againstLiveAssetIds: ["Z"]) == .allGone)
+    }
+
+    @Test("reconcile narrows to the survivors when only some assets are gone")
+    func reconcileSomePruned() {
+        // The user asked for all three gone; one already is. The other
+        // two still deserve to be trashed, so the intent narrows rather
+        // than being discarded wholesale.
+        let a = asset("A", ck: "ck-A"), b = asset("B", ck: "ck-B"), c = asset("C", ck: "ck-C")
+        let i = intent(assets: [a, b, c])
+        guard case .somePruned(let survivors) = i.reconcile(againstLiveAssetIds: ["A", "C"]) else {
+            Issue.record("expected .somePruned")
+            return
+        }
+        #expect(survivors.map(\.id) == ["A", "C"])
+    }
+
+    @Test("reconcile reports noneMissing when every asset is still present")
+    func reconcileNoneMissing() {
+        // A 400 with everything still on the server means something else
+        // failed — the caller must treat it as an ordinary failure and
+        // not silently delete the user's queued deletion.
+        let i = intent(assets: [asset("A", ck: "ck-A"), asset("B", ck: "ck-B")])
+        #expect(i.reconcile(againstLiveAssetIds: ["A", "B"]) == .noneMissing)
+        #expect(i.reconcile(againstLiveAssetIds: ["A", "B", "extra"]) == .noneMissing)
+    }
+
     @Test("isWedgedOnTagCreateConflict matches the server's tag-conflict 400 inside the HTTP envelope")
     func wedgeDetectionMatchesTagConflict() {
         // Exactly the string `describeSyncError` builds for this failure:

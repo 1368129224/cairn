@@ -64,6 +64,33 @@ public struct PendingTrashIntent: Codable, Sendable, Hashable {
     /// `describeSyncError` builds.
     public static let tagAlreadyExistsMessage = "A tag with that name already exists"
 
+    /// How this intent's asset set compares to what's still on the server.
+    public enum ServerReconciliation: Equatable, Sendable {
+        /// Nothing survives. The deletion happened by some other route,
+        /// so the intent is satisfied and should leave the queue.
+        case allGone
+        /// A subset survives. The intent should be narrowed to these —
+        /// the user asked for all of them gone, some already are.
+        case somePruned(survivors: [ServerAsset])
+        /// Everything is still there, so whatever the request failed on
+        /// wasn't a missing asset.
+        case noneMissing
+    }
+
+    /// Compare this intent's assets against the ids the server still
+    /// resolves.
+    ///
+    /// Immich's `requireAccess` rejects a batch containing any unknown id
+    /// with a single HTTP 400 covering the whole call, so one asset
+    /// deleted through another client permanently poisons a queued
+    /// request. Callers use this to decide whether to drop the intent,
+    /// narrow it, or treat the failure as unrelated.
+    public func reconcile(againstLiveAssetIds liveIds: Set<String>) -> ServerReconciliation {
+        let survivors = assets.filter { liveIds.contains($0.id) }
+        if survivors.count == assets.count { return .noneMissing }
+        return survivors.isEmpty ? .allGone : .somePruned(survivors: survivors)
+    }
+
     /// True when this intent's last failure was the create-only-tag
     /// conflict above — a permanent wedge under the old `POST` path that
     /// retrying could never clear, and which the switch to

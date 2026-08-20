@@ -3353,6 +3353,91 @@ final class AppDependencies {
         }
     }
 
+    /// Outcome of reconciling a failed intent against what's actually
+    /// still on the server.
+    fileprivate enum VanishedAssetOutcome {
+        /// Every asset is gone. The intent is satisfied by other means —
+        /// removed from the queue.
+        case allGone
+        /// Some assets are gone. The intent was rewritten to the
+        /// survivors so the next drain can succeed on what remains.
+        case somePruned(remaining: Int, removed: Int)
+        /// Everything is still there — the 400 meant something else, so
+        /// the caller handles it as an ordinary failure.
+        case noneMissing
+    }
+
+    /// Re-check a failed intent's assets against the server and prune
+    /// whatever no longer exists.
+    ///
+    /// Immich's `requireAccess` rejects a batch containing any unknown id
+    /// with HTTP 400 `Not found or no <permission> access` — all-or-
+    /// nothing, so a single asset deleted through another client (the
+    /// Immich mobile app, duplicate resolution, another tool) permanently
+    /// poisons the whole queued request. Matching on that message would
+    /// work until the wording changes; asking the server which ids still
+    /// resolve is stable.
+    ///
+    /// `fetchAssets` already drops per-asset 404s, so the returned set is
+    /// exactly "still there." A transport failure mid-check returns
+    /// `.noneMissing` — better to retry the intent than to delete a
+    /// user's queued deletion on the strength of a failed lookup.
+    ///
+    /// Partial survival prunes rather than drops: the user asked for all
+    /// of them gone, some already are, and the rest still deserve to be.
+    fileprivate func reconcileVanishedAssets(
+        intent: PendingTrashIntent,
+        client: ImmichClient,
+        store: any PendingTrashIntentStore,
+        journal: DeletionJournal
+    ) async -> VanishedAssetOutcome {
+        let ids = intent.assets.map(\.id)
+        guard let live = try? await client.fetchAssets(ids: ids) else { return .noneMissing }
+        let survivors: [ServerAsset]
+        switch intent.reconcile(againstLiveAssetIds: Set(live.map(\.id))) {
+        case .noneMissing:
+            return .noneMissing
+        case .allGone:
+            survivors = []
+        case .somePruned(let remaining):
+            survivors = remaining
+        }
+
+        if survivors.isEmpty {
+            try? await store.remove(intent.id)
+            // Record why the request stopped existing. The runId is
+            // already in the journal from the original attempt, so this
+            // lands on that run rather than inventing a new one — a
+            // queued deletion should never vanish without a trace.
+            try? await journal.append(.init(
+                timestamp: Date(),
+                runId: intent.runId,
+                event: .runAborted(
+                    reason: "dropped from the retry queue: none of its \(intent.assets.count) asset(s) are on the server any more"
+                )
+            ))
+            return .allGone
+        }
+
+        let removed = intent.assets.count - survivors.count
+        // No store API for editing an intent's asset set in place, so
+        // rewrite it. Same `id` and `runId`, so the journal and any UI
+        // referencing this request stay coherent; `attemptCount` carries
+        // over because this is the same user decision, not a new one.
+        try? await store.remove(intent.id)
+        try? await store.enqueue(PendingTrashIntent(
+            id: intent.id,
+            createdAt: intent.createdAt,
+            runId: intent.runId,
+            assets: survivors,
+            assetsInPurview: intent.assetsInPurview,
+            lastAttemptedAt: Date(),
+            attemptCount: intent.attemptCount,
+            lastError: "\(removed) asset(s) were already gone from the server; retrying the remaining \(survivors.count)."
+        ))
+        return .somePruned(remaining: survivors.count, removed: removed)
+    }
+
     /// Refresh `model.pendingTrashCount` and `pendingTrashStuckCount`
     /// from the per-server retry queue. Cheap: queue is small and the
     /// snapshot pre-decodes the JSON ServerAsset payload only when
@@ -3440,15 +3525,40 @@ final class AppDependencies {
                     dropped += 1
                     syncLog.notice("[cairn.trashqueue] run=\(runTag, privacy: .public) dropped: assets are gone from the server (HTTP 404)")
                 } else {
-                    failed += 1
-                    let msg = Self.describeSyncError(e)
-                    syncLog.error("[cairn.trashqueue] run=\(runTag, privacy: .public) failed, attempt \(intent.attemptCount + 1)/\(cap): \(msg, privacy: .public)")
-                    try? await store.update(
-                        intent.id,
-                        lastAttemptedAt: now,
-                        attemptCount: intent.attemptCount + 1,
-                        lastError: msg
-                    )
+                    // Immich answers "this asset isn't there" with 400,
+                    // not 404 — `requireAccess` throws
+                    // BadRequestException("Not found or no <perm>
+                    // access") and it's all-or-nothing across the batch,
+                    // so one deleted asset fails the whole call. Without
+                    // this branch the intent retried that 400 forever and
+                    // wedged at `maxRetryAttempts`. Only on 400: 5xx and
+                    // auth failures say nothing about asset existence,
+                    // and the check costs one GET per asset.
+                    var handled = false
+                    if case .httpStatus(400, _) = e {
+                        switch await self.reconcileVanishedAssets(intent: intent, client: client, store: store, journal: journal) {
+                        case .allGone:
+                            dropped += 1
+                            handled = true
+                            syncLog.notice("[cairn.trashqueue] run=\(runTag, privacy: .public) dropped: none of its \(intent.assets.count) asset(s) are on the server any more")
+                        case .somePruned(let remaining, let removed):
+                            handled = true
+                            syncLog.notice("[cairn.trashqueue] run=\(runTag, privacy: .public) pruned \(removed) vanished asset(s); \(remaining) still to trash, retrying next sync")
+                        case .noneMissing:
+                            break
+                        }
+                    }
+                    if !handled {
+                        failed += 1
+                        let msg = Self.describeSyncError(e)
+                        syncLog.error("[cairn.trashqueue] run=\(runTag, privacy: .public) failed, attempt \(intent.attemptCount + 1)/\(cap): \(msg, privacy: .public)")
+                        try? await store.update(
+                            intent.id,
+                            lastAttemptedAt: now,
+                            attemptCount: intent.attemptCount + 1,
+                            lastError: msg
+                        )
+                    }
                 }
             } catch {
                 failed += 1
