@@ -2059,6 +2059,24 @@ final class AppDependencies {
                     let summary = try await coordinator.syncToCache(onProgress: onStreamProgress)
                     syncLog.notice("[cairn.sync.stream] mode=\(summary.mode.rawValue, privacy: .public) upserted=\(summary.upserted, privacy: .public) deleted=\(summary.deleted, privacy: .public) ignored=\(summary.ignored, privacy: .public) durationMs=\(summary.durationMs, privacy: .public)")
                     assets = try await cache.snapshot()
+                    // Drift check. On this path the candidate set comes
+                    // from the local cache, not the network — so a cache
+                    // that missed delete events proposes trashing assets
+                    // Immich no longer has, and nothing downstream would
+                    // notice. `assets/statistics` is a cheap count, and
+                    // comparing it against the cache turns "did the cache
+                    // drift" into something the logs answer directly
+                    // rather than something you reconstruct afterwards.
+                    // Best-effort: a failed count must not fail the sync.
+                    if let stats = try? await client.assetStatistics(includeTrashed: false) {
+                        let cached = assets.filter { !$0.isTrashed }.count
+                        let delta = cached - stats.total
+                        if delta == 0 {
+                            syncLog.notice("[cairn.sync.drift] cache agrees with server: \(cached, privacy: .public) non-trashed assets")
+                        } else {
+                            syncLog.error("[cairn.sync.drift] cache disagrees with server: cache=\(cached, privacy: .public) server=\(stats.total, privacy: .public) delta=\(delta, privacy: .public) — candidates this sync came from the cache, so a positive delta means assets may be proposed for trash that the server no longer has")
+                        }
+                    }
                     outcome = .incremental(summary)
                 } catch let err as ImmichClientError {
                     let reason: String
