@@ -1,11 +1,12 @@
-0.4.4 (build 148) — fixes trash requests that got permanently stuck.
+0.4.5 (build 149) — trash-queue reliability, duplicate runs, and Immich v3 sync.
 
-If a trash run failed partway through — server unreachable, connection dropped mid-run, VPN down — every later retry failed with "Immich returned HTTP 400: A tag with that name already exists", and the request sat in the queue for good. No amount of retrying could clear it.
+Follow-up to 0.4.4's stuck-request fix. That one addressed why retries failed; this one addresses why they got stuck in the first place, and fixes incremental sync against Immich v3.
 
-The cause was on cairn's side. Every trash run writes a breadcrumb tag to Immich so the run can be reconstructed later, and cairn was creating those tags with an endpoint that rejects duplicates instead of the one that reuses an existing tag. Since a retry reuses its original run's tag, the second attempt was refused every time.
+- Interruptions no longer count against the retry limit. When iOS suspends a background refresh mid-request, the request is cancelled — that isn't the server refusing, but it used to burn one of your 5 attempts. It's how a request could reach "stuck" without anything actually being wrong.
+- Queued requests whose photos are already gone from Immich now leave the queue instead of retrying forever. If only some are gone, the request narrows to the ones that remain.
+- No more duplicate runs. While a request sat queued, the next sync could propose the same photos again and trash them a second time — two runs in the list for one decision. Syncing now accounts for what's already queued, and a successful run clears any queued request covering the same photos.
+- Immich v3: incremental sync works again. v3 retired the streaming API cairn used, so every sync had been quietly falling back to refetching your whole library. cairn now uses the replacement and still works with older servers. This is off by default — Settings → Advanced → Incremental server sync. Expect the first sync after switching it on to re-download the full list once; after that it streams only changes.
+- Run details read in plain language ("interrupted before it finished") instead of a wall of raw error text, and a run's duration is now the time that attempt took rather than the days between retries.
+- The retry queue logs every attempt now, so a stuck request can be diagnosed from a diagnostic export instead of guesswork.
 
-- Trash retries now reuse the run's existing tag rather than failing on it.
-- Requests already stuck on this error are cleared when you update — they run on your next sync, no tap needed.
-- Run breadcrumbs now nest under cairn / v1 / run in Immich's tag list instead of sitting there as one flat entry.
-
-To test: after updating, open Status → Pending trashes. If you had a stuck request, it should drain on the next sync on its own — you shouldn't need "Retry all now". Confirm the photos actually reached Immich's Trash. To exercise the original failure path, drop your server or VPN mid-sync so a trash run fails, bring it back, and check that the queued request drains on the following sync instead of wedging.
+To test: check Status → Pending trashes. Anything queued should drain, narrow, or drop on the next sync rather than sitting there. Trash a batch and confirm Runs shows exactly one run for it, not two. If you want to exercise the v3 sync path, turn on Settings → Advanced → Incremental server sync, let it do its one full pass, then sync a few more times and confirm your counts stay correct — a diagnostic export will show whether the cached view agrees with the server on each sync.
