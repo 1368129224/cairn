@@ -1,12 +1,7 @@
-0.4.5 (build 149) — trash-queue reliability, duplicate runs, and Immich v3 sync.
+0.4.5 (build 150) — fixes the dead space at the top of the Status screen.
 
-Follow-up to 0.4.4's stuck-request fix. That one addressed why retries failed; this one addresses why they got stuck in the first place, and fixes incremental sync against Immich v3.
+The cairn wordmark sat about 65pt lower than intended on every screen with the brand header (Status and Setup), leaving a conspicuous empty band above the fold. The padding was adding the status bar height to content that iOS had already pushed below the status bar, counting it twice.
 
-- Interruptions no longer count against the retry limit. When iOS suspends a background refresh mid-request, the request is cancelled — that isn't the server refusing, but it used to burn one of your 5 attempts. It's how a request could reach "stuck" without anything actually being wrong.
-- Queued requests whose photos are already gone from Immich now leave the queue instead of retrying forever. If only some are gone, the request narrows to the ones that remain.
-- No more duplicate runs. While a request sat queued, the next sync could propose the same photos again and trash them a second time — two runs in the list for one decision. Syncing now accounts for what's already queued, and a successful run clears any queued request covering the same photos.
-- Immich v3: incremental sync works again. v3 retired the streaming API cairn used, so every sync had been quietly falling back to refetching your whole library. cairn now uses the replacement and still works with older servers. This is off by default — Settings → Advanced → Incremental server sync. Expect the first sync after switching it on to re-download the full list once; after that it streams only changes.
-- Run details read in plain language ("interrupted before it finished") instead of a wall of raw error text, and a run's duration is now the time that attempt took rather than the days between retries.
-- The retry queue logs every attempt now, so a stuck request can be diagnosed from a diagnostic export instead of guesswork.
+Everything from build 149 is included: trash-queue reliability, no more duplicate runs for the same photos, and Immich v3 incremental sync.
 
-To test: check Status → Pending trashes. Anything queued should drain, narrow, or drop on the next sync rather than sitting there. Trash a batch and confirm Runs shows exactly one run for it, not two. If you want to exercise the v3 sync path, turn on Settings → Advanced → Incremental server sync, let it do its one full pass, then sync a few more times and confirm your counts stay correct — a diagnostic export will show whether the cached view agrees with the server on each sync.
+To test: open the app and check that the wordmark sits a normal distance below the status bar rather than a third of the way down the screen. Worth a look on the Setup screen too if you have a spare device or a fresh install — it uses the same header. If you haven't exercised build 149 yet, the notes there still apply: queued trash requests should drain or drop rather than sticking, and a batch you trash should produce exactly one run in the list.
