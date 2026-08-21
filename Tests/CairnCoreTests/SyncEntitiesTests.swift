@@ -212,4 +212,30 @@ struct SyncEntitiesTests {
         let decoded = try JSONDecoder().decode(SyncAckRecord.self, from: encoded)
         #expect(decoded == original)
     }
+
+    @Test("an AssetV2 envelope decodes to .asset, same as AssetV1")
+    func decodesAssetV2Envelope() throws {
+        // v3 emits AssetV2 for AssetsV2 streams. The schemas differ only
+        // in `duration` (string -> int32 ms), which cairn doesn't decode,
+        // so one payload type serves both. `duration` is present here as
+        // an integer precisely to prove it doesn't break decoding.
+        let json = #"""
+        {"type":"AssetV2","ack":"ack-v2","data":{"id":"a1","ownerId":"o1","originalFileName":"IMG_1.HEIC","checksum":"AAAA","thumbhash":null,"livePhotoVideoId":null,"deletedAt":null,"visibility":"timeline","isFavorite":false,"type":"IMAGE","fileCreatedAt":null,"fileModifiedAt":null,"width":100,"height":200,"duration":1500}}
+        """#
+        let event = try JSONDecoder().decode(SyncEvent.self, from: Data(json.utf8))
+        guard case .asset(let payload, let ack) = event else {
+            Issue.record("expected .asset, got \(event)")
+            return
+        }
+        #expect(payload.id == "a1")
+        #expect(payload.checksum == "AAAA")
+        #expect(ack == "ack-v2")
+    }
+
+    @Test("AssetsV2 and AssetV2 round-trip their wire spellings")
+    func v2RawValues() {
+        #expect(SyncRequestType.assetsV2.rawValue == "AssetsV2")
+        #expect(SyncEntityType.assetV2.rawValue == "AssetV2")
+        #expect(SyncEntityType(rawValue: "AssetV2") == .assetV2)
+    }
 }

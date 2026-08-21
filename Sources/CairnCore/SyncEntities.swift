@@ -9,7 +9,14 @@ import Foundation
 // requests `assetsV1`; everything else is irrelevant to deletion reconciliation.
 
 public enum SyncRequestType: String, Sendable, Codable, Hashable {
+    /// Deprecated server-side as of Immich v3 — `sync.service.ts` throws
+    /// `BadRequestException("SyncRequestType.AssetsV1 is deprecated, use
+    /// SyncRequestType.AssetsV2 instead")`. Kept because servers older
+    /// than v3 don't know `AssetsV2` and reject *it* instead; the
+    /// coordinator negotiates between the two.
     case assetsV1 = "AssetsV1"
+    /// Immich v3+. Emits `AssetV2` upserts; deletes stay `AssetDeleteV1`.
+    case assetsV2 = "AssetsV2"
 }
 
 // MARK: - Entity (event) types
@@ -24,6 +31,11 @@ public enum SyncRequestType: String, Sendable, Codable, Hashable {
 
 public enum SyncEntityType: String, Sendable, Codable, Hashable {
     case assetV1 = "AssetV1"
+    /// The `AssetsV2` upsert type. Wire-compatible with `AssetV1` for
+    /// every field cairn reads — the schemas differ only in `duration`
+    /// (`string` → `int32` milliseconds, the v3 "duration in
+    /// milliseconds" change), which `SyncAssetV1` doesn't decode.
+    case assetV2 = "AssetV2"
     case assetDeleteV1 = "AssetDeleteV1"
     case syncCompleteV1 = "SyncCompleteV1"
     case syncResetV1 = "SyncResetV1"
@@ -168,7 +180,11 @@ extension SyncEvent: Decodable {
         }
 
         switch entity {
-        case .assetV1:
+        case .assetV1, .assetV2:
+            // One payload type for both: see `SyncEntityType.assetV2`.
+            // The event doesn't need to remember which produced it — a
+            // stream requests exactly one asset type, so the coordinator
+            // already knows which ack key to record.
             let asset = try container.decode(SyncAssetV1.self, forKey: .data)
             self = .asset(asset, ack: ack)
         case .assetDeleteV1:

@@ -32,6 +32,14 @@ public actor ServerAssetSyncCoordinator {
     private let ackStore: any SyncAckStore
     private let clock: @Sendable () -> Date
 
+    /// Which asset request type this server accepts, once we've learned
+    /// it. Immich v3 rejects `AssetsV1` as deprecated; anything older
+    /// rejects `AssetsV2` as an unknown enum value. Both answer 400, so
+    /// rather than plumbing a server version down here we try the modern
+    /// one first and remember what worked. Cleared state (a fresh
+    /// coordinator, e.g. after re-auth) just re-negotiates.
+    private var negotiatedAssetRequestType: SyncRequestType?
+
     public init(
         client: ImmichClient,
         cache: any ServerAssetCacheStore,
@@ -70,6 +78,45 @@ public actor ServerAssetSyncCoordinator {
         batchSize: Int = 100,
         onProgress: (@Sendable (Int) -> Void)? = nil
     ) async throws -> SyncRunSummary {
+        // Try the modern type first on an unknown server; fall back once.
+        // The type is validated before the server emits anything, so a
+        // rejected attempt has applied no events and retrying is clean.
+        let candidates: [SyncRequestType] = negotiatedAssetRequestType.map { [$0] } ?? [.assetsV2, .assetsV1]
+        var lastError: Error?
+        for requestType in candidates {
+            do {
+                let summary = try await streamOnce(
+                    requestType: requestType,
+                    batchSize: batchSize,
+                    onProgress: onProgress
+                )
+                if negotiatedAssetRequestType != requestType {
+                    coordLog.notice("[cairn.sync.stream] negotiated request type \(requestType.rawValue, privacy: .public)")
+                    negotiatedAssetRequestType = requestType
+                }
+                return summary
+            } catch let err as ImmichClientError {
+                // Only a 400 means "this server won't take that type" —
+                // scope, auth and transport failures must propagate so
+                // the caller's fallback + banner logic still fires.
+                guard case .httpStatus(400, _) = err, requestType != candidates.last else { throw err }
+                coordLog.notice("[cairn.sync.stream] \(requestType.rawValue, privacy: .public) rejected (HTTP 400) — retrying with the other asset request type")
+                lastError = err
+                continue
+            }
+        }
+        throw lastError ?? ImmichClientError.unexpectedResponse("sync stream: no request type accepted")
+    }
+
+    private func streamOnce(
+        requestType: SyncRequestType,
+        batchSize: Int,
+        onProgress: (@Sendable (Int) -> Void)?
+    ) async throws -> SyncRunSummary {
+        // Upserts arrive as AssetV1 or AssetV2 depending on what we
+        // asked for; the ack cursor is keyed per entity type, so record
+        // against the one this stream actually produces.
+        let assetUpsertType: SyncEntityType = requestType == .assetsV2 ? .assetV2 : .assetV1
         let start = clock()
         let priorSize = try await cache.size()
         let isBootstrap = priorSize == 0
@@ -89,12 +136,12 @@ public actor ServerAssetSyncCoordinator {
         // reinstall of cairn against the same API key could leave the
         // server thinking the client is caught up while the local
         // cache is empty.
-        let stream = client.syncStream(types: [.assetsV1], reset: isBootstrap)
+        let stream = client.syncStream(types: [requestType], reset: isBootstrap)
 
         for try await event in stream {
             try Task.checkCancellation()
             batch.append(event)
-            if let entityType = Self.entityType(for: event), let ack = event.ack {
+            if let entityType = Self.entityType(for: event, assetUpsertType: assetUpsertType), let ack = event.ack {
                 // Last write wins per type — events arrive in
                 // server-order so this records the most recent ack.
                 highestAckByType[entityType] = ack
@@ -175,10 +222,10 @@ public actor ServerAssetSyncCoordinator {
     /// Map a SyncEvent to its underlying entity type for cursor
     /// bookkeeping. Returns nil for `.ignored` so we don't persist
     /// a cursor under a phantom raw-string type.
-    private static func entityType(for event: SyncEvent) -> SyncEntityType? {
+    private static func entityType(for event: SyncEvent, assetUpsertType: SyncEntityType) -> SyncEntityType? {
         switch event {
         case .asset:
-            return .assetV1
+            return assetUpsertType
         case .assetDeleted:
             return .assetDeleteV1
         case .complete(let type, _):

@@ -119,7 +119,7 @@ struct ServerAssetSyncCoordinatorIntegrationTests {
 
         // The highest asset ack is "a3-ack" — last AssetV1 in the
         // stream. SyncCompleteV1 also persists.
-        #expect(try await acks.ack(for: .assetV1) == "a3-ack")
+        #expect(try await acks.ack(for: .assetV2) == "a3-ack")
         #expect(try await acks.ack(for: .syncCompleteV1) == "complete")
     }
 
@@ -280,6 +280,6 @@ struct ServerAssetSyncCoordinatorIntegrationTests {
         #expect(Set(snap.map(\.id)) == ["persistent-1"])
 
         let acks = SwiftDataSyncAckStore(container: container)
-        #expect(try await acks.ack(for: .assetV1) == "persistent-1-ack")
+        #expect(try await acks.ack(for: .assetV2) == "persistent-1-ack")
     }
 }

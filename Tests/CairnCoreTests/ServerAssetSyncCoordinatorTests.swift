@@ -207,7 +207,7 @@ struct ServerAssetSyncCoordinatorTests {
         let firstBody = try #require(streamBodies.value.first)
         let json = try JSONSerialization.jsonObject(with: firstBody) as? [String: Any]
         #expect((json?["reset"] as? Bool) == true)
-        #expect((json?["types"] as? [String]) == ["AssetsV1"])
+        #expect((json?["types"] as? [String]) == ["AssetsV2"])
     }
 
     @Test("non-empty cache → incremental mode, reset omitted")
@@ -336,9 +336,11 @@ struct ServerAssetSyncCoordinatorTests {
         _ = arrangeHappyPath(mock: mock, streamLines: lines)
         _ = try await coordinator.syncToCache()
 
-        // Last asset ack received should be the persisted cursor for AssetV1;
-        // last delete ack for AssetDeleteV1; last complete ack for SyncCompleteV1.
-        #expect(try await ackStore.ack(for: .assetV1) == "asset-ack-3")
+        // Last asset ack received should be the persisted cursor for the
+        // negotiated upsert type — AssetV2 here, since the mock accepts
+        // AssetsV2 and that's what the coordinator asks for first. Deletes
+        // stay AssetDeleteV1 in both protocol versions.
+        #expect(try await ackStore.ack(for: .assetV2) == "asset-ack-3")
         #expect(try await ackStore.ack(for: .assetDeleteV1) == "delete-ack-1")
         #expect(try await ackStore.ack(for: .syncCompleteV1) == "complete-ack")
     }
@@ -500,5 +502,83 @@ struct ServerAssetSyncCoordinatorTests {
         } catch {
             Issue.record("expected ImmichClientError, got \(error)")
         }
+    }
+
+    // MARK: - AssetsV1 / AssetsV2 negotiation
+
+    @Test("requests AssetsV2 first — the only type Immich v3 accepts")
+    func prefersAssetsV2() async throws {
+        let (client, mock) = makeClient()
+        let coordinator = ServerAssetSyncCoordinator(client: client, cache: FakeCache(), ackStore: FakeAckStore())
+
+        let requestedTypes = Ref<[[String]]>([])
+        mock.handler = { req in
+            if req.url?.path == "/api/sync/stream" {
+                let json = try! JSONSerialization.jsonObject(with: req.readBody()) as! [String: Any]
+                requestedTypes.mutate { $0.append(json["types"] as! [String]) }
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                        Data((self.completeLine("done-ack") + "\n").utf8))
+            }
+            return (HTTPURLResponse(url: req.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!, Data())
+        }
+
+        _ = try await coordinator.syncToCache()
+        #expect(requestedTypes.value == [["AssetsV2"]])
+    }
+
+    @Test("falls back to AssetsV1 when the server rejects AssetsV2, and remembers the choice")
+    func fallsBackToAssetsV1AndRemembers() async throws {
+        // Pre-v3 servers don't know AssetsV2 and reject it the same way
+        // v3 rejects AssetsV1 — with a 400. Negotiating rather than
+        // hard-coding keeps one build working against both.
+        let (client, mock) = makeClient()
+        let coordinator = ServerAssetSyncCoordinator(client: client, cache: FakeCache(), ackStore: FakeAckStore())
+
+        let requestedTypes = Ref<[[String]]>([])
+        mock.handler = { req in
+            if req.url?.path == "/api/sync/stream" {
+                let json = try! JSONSerialization.jsonObject(with: req.readBody()) as! [String: Any]
+                let types = json["types"] as! [String]
+                requestedTypes.mutate { $0.append(types) }
+                if types.contains("AssetsV2") {
+                    return (HTTPURLResponse(url: req.url!, statusCode: 400, httpVersion: nil, headerFields: nil)!,
+                            Data(#"{"message":"Invalid enum value"}"#.utf8))
+                }
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                        Data((self.completeLine("done-ack") + "\n").utf8))
+            }
+            return (HTTPURLResponse(url: req.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!, Data())
+        }
+
+        _ = try await coordinator.syncToCache()
+        #expect(requestedTypes.value == [["AssetsV2"], ["AssetsV1"]])
+
+        // Second run must not re-pay the rejected probe.
+        _ = try await coordinator.syncToCache()
+        #expect(requestedTypes.value == [["AssetsV2"], ["AssetsV1"], ["AssetsV1"]])
+    }
+
+    @Test("a non-400 stream failure propagates instead of being retried as a type problem")
+    func nonBadRequestPropagates() async throws {
+        // 403 means missing scope and 5xx means the server is unwell —
+        // both must reach the caller's fallback/banner handling rather
+        // than being mistaken for an unsupported request type.
+        let (client, mock) = makeClient()
+        let coordinator = ServerAssetSyncCoordinator(client: client, cache: FakeCache(), ackStore: FakeAckStore())
+
+        let attempts = Ref<Int>(0)
+        mock.handler = { req in
+            if req.url?.path == "/api/sync/stream" {
+                attempts.mutate { $0 += 1 }
+                return (HTTPURLResponse(url: req.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
+                        Data(#"{"message":"boom"}"#.utf8))
+            }
+            return (HTTPURLResponse(url: req.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!, Data())
+        }
+
+        await #expect(throws: ImmichClientError.self) {
+            _ = try await coordinator.syncToCache()
+        }
+        #expect(attempts.value == 1)
     }
 }
