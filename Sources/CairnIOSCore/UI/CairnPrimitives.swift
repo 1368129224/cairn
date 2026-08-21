@@ -14,47 +14,59 @@ import UIKit
 /// Cross-screen layout helpers driven by runtime system metrics so we
 /// don't sprinkle hardcoded paddings tuned for a single device.
 public enum CairnLayout {
+    /// Gap we want between the top system chrome and the wordmark.
+    private static let brandHeaderGap: CGFloat = 30
+
+    /// Total clearance to fall back to when the system reports no top
+    /// safe-area inset at all — an iPhone-only app in iPad compat mode,
+    /// whose chrome is drawn outside the iPhone window's reported safe
+    /// area. Enough to clear it unaided.
+    private static let brandHeaderCompatClearance: CGFloat = 96
+
     /// Top padding for the hand-rolled brand header (Status + Setup
     /// wordmarks) — sits the cairn mark a comfortable distance below
     /// whatever system chrome is at the top of the screen.
     ///
-    /// Reads the live status-bar frame from the active window scene
-    /// rather than hardcoding a per-device value. On iPhone the
-    /// status bar is ~50pt, on iPad with Live Activity / Dynamic
-    /// Island it can be larger, and an iPhone-only app in iPad
-    /// compat mode reports 0pt (the iPad's status bar lives outside
-    /// the iPhone window's reported safe area) — in that case we
-    /// fall back to a generous baseline so the wordmark still clears
-    /// the visually-overlaid iPad chrome.
+    /// Both headers live inside a `ScrollView` that SwiftUI has already
+    /// inset for the top safe area, so the status bar is *already*
+    /// accounted for before this padding applies. The previous
+    /// implementation added the measured status-bar height on top of
+    /// that, double-counting it: the comment claimed "status bar + ~30pt
+    /// gap" but the result was the safe-area inset plus a further 96pt,
+    /// putting the wordmark ~155pt down a 15 Pro instead of ~89pt.
+    ///
+    /// So: measure the inset that's already applied and pad only by
+    /// what's missing. On any real iPhone the inset covers the chrome
+    /// and this is just `brandHeaderGap`; where the system reports no
+    /// inset, it widens to clear the chrome itself.
     ///
     /// Computed property (not a constant) so device rotation / scene
     /// changes pick up the new value on next render.
     public static var brandHeaderTopPadding: CGFloat {
         #if canImport(UIKit)
-        let measured = activeStatusBarHeight()
-        // Match prior on-iPhone visual (status bar + ~30pt gap)
-        // while guaranteeing a baseline that clears compat-mode
-        // chrome where the system reports 0.
-        return max(measured + 32, 96)
+        let inset = activeTopSafeAreaInset()
+        return max(brandHeaderCompatClearance - inset, brandHeaderGap)
         #else
         return 60
         #endif
     }
 
     #if canImport(UIKit)
-    /// Live status-bar frame height from the foreground window scene.
-    /// Returns 0 if no scene is active (e.g., during launch).
-    private static func activeStatusBarHeight() -> CGFloat {
+    /// Top safe-area inset of the foreground window — the amount
+    /// SwiftUI has already pushed our content down by. Returns 0 if no
+    /// scene is active (during launch) or when the platform reports
+    /// none, which is the case the compat clearance exists for.
+    private static func activeTopSafeAreaInset() -> CGFloat {
         guard
             let scene = UIApplication.shared.connectedScenes
                 .compactMap({ $0 as? UIWindowScene })
                 .first(where: { $0.activationState == .foregroundActive })
                 ?? UIApplication.shared.connectedScenes
                     .compactMap({ $0 as? UIWindowScene })
-                    .first,
-            let statusBar = scene.statusBarManager
+                    .first
         else { return 0 }
-        return statusBar.statusBarFrame.height
+        let window = scene.windows.first { $0.isKeyWindow } ?? scene.windows.first
+        return window?.safeAreaInsets.top ?? 0
     }
     #endif
 }
