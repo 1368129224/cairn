@@ -2646,6 +2646,17 @@ final class AppDependencies {
         // Run the engine off the MainActor — it's a pure function over
         // up-to-100k-element sets (hundreds of ms of CPU) and blocking
         // main for it stutters the UI. Inputs and output are all Sendable.
+        // Checksums the user already committed to trashing that are
+        // waiting in the retry queue. Feeding them to the engine keeps a
+        // sync from re-proposing work that's already queued — otherwise
+        // the new run and the queued retry both trash the same assets and
+        // the Runs list shows two runs for one decision.
+        let queuedForTrashChecksums: Set<Checksum> = await {
+            guard let store = self.pendingTrashStore,
+                  let intents = try? await store.snapshot() else { return [] }
+            return intents.reduce(into: Set<Checksum>()) { $0.formUnion($1.checksums) }
+        }()
+
         let engineInput = ReconciliationInput(
             serverAssets: serverAssets,
             currentLocalChecksums: extendedLocal,
@@ -2658,7 +2669,8 @@ final class AppDependencies {
             observedAlbumTags: observedAlbumTags,
             selectedAlbumScope: selectedAlbumScope,
             excludedAtByChecksum: exclusionAddedAt,
-            alivePhoneAssetKeys: alivePhoneAssetKeys
+            alivePhoneAssetKeys: alivePhoneAssetKeys,
+            queuedForTrashChecksums: queuedForTrashChecksums
         )
         var result = await Task.detached(priority: .userInitiated) {
             ReconciliationEngine.compute(engineInput)
@@ -3337,6 +3349,13 @@ final class AppDependencies {
                 )
             }
             model.recordSyncSuccess()
+            // Same reasoning as the manual path: a queued intent over
+            // these assets is now moot, and leaving it would produce a
+            // second run for the same decision.
+            if !trashedChecksums.isEmpty {
+                try? await pendingTrashStore?.removeIntents(containingAnyOf: trashedChecksums)
+                await refreshPendingTrashCount()
+            }
             syncLog.notice("[cairn.autotrash] auto-trashed \(trashedCount, privacy: .public) candidate(s) under \(String(describing: strictness), privacy: .public) strictness")
             await refreshRunsList()
             await refreshJournalTail()
@@ -4739,6 +4758,12 @@ final class AppDependencies {
                         dryRun: false
                     )
                     let trashedCount = result.trashedAssetIds.count
+                    let trashedIds = Set(result.trashedAssetIds)
+                    let trashedChecksums = Set(
+                        live.deleteCandidates
+                            .filter { trashedIds.contains($0.id) }
+                            .map(\.checksum)
+                    )
                     await MainActor.run {
                         // Prune ONLY the trashed candidates from the
                         // reconciliation — not the whole thing. Nil-ing it
@@ -4747,12 +4772,6 @@ final class AppDependencies {
                         // the Status quarantine banner vanished until the
                         // next sync even though those items remained.
                         // Mirrors the prune in `handleTrashFailure`.
-                        let trashedIds = Set(result.trashedAssetIds)
-                        let trashedChecksums = Set(
-                            live.deleteCandidates
-                                .filter { trashedIds.contains($0.id) }
-                                .map(\.checksum)
-                        )
                         if let existing = self.model.reconciliation {
                             self.model.reconciliation = existing.removing(checksums: trashedChecksums)
                         }
@@ -4775,6 +4794,14 @@ final class AppDependencies {
                         // any disconnect banner and reset the alert
                         // dedup flag.
                         self.model.recordSyncSuccess()
+                    }
+                    // A queued intent covering any of these is now
+                    // moot — this run just trashed them. Leaving it would
+                    // have the drain re-trash the same assets and log a
+                    // second run for one decision.
+                    if !trashedChecksums.isEmpty {
+                        try? await self.pendingTrashStore?.removeIntents(containingAnyOf: trashedChecksums)
+                        await self.refreshPendingTrashCount()
                     }
                     await self.persistSnapshotFromModel()
                     await self.refreshRunsList()

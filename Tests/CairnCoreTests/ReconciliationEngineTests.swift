@@ -1069,4 +1069,47 @@ struct ReconciliationEngineTests {
         #expect(output.deleteCandidates.isEmpty)
         #expect(output.aliveOnPhoneCandidateCount == 1)
     }
+
+    @Test("queued-for-trash checksums are not re-proposed as candidates")
+    func queuedForTrashSuppressesCandidates() {
+        // A queued intent means the user already decided; the retry queue
+        // owns that work. Re-proposing it here is what produced two runs
+        // over the same assets, both reporting success because trashing
+        // an already-trashed asset is a server-side no-op.
+        func compute(queued: Set<Checksum>) -> ReconciliationOutput {
+            ReconciliationEngine.compute(.init(
+                serverAssets: [asset("s1", "A"), asset("s2", "B")],
+                currentLocalChecksums: [],
+                observedChecksums: checksums("A", "B"),
+                confirmedDeletedAt: pastConfirmed("A", "B"),
+                strictness: .autonomous,
+                queuedForTrashChecksums: queued
+            ))
+        }
+        #expect(Set(compute(queued: []).deleteCandidates.map(\.id)) == ["s1", "s2"])
+        #expect(compute(queued: checksums("A")).deleteCandidates.map(\.id) == ["s2"])
+    }
+
+    @Test("queued suppression holds under every strictness and releases when the queue drains")
+    func queuedForTrashAcrossStrictness() {
+        func compute(_ strictness: DeletionStrictness, queued: Set<Checksum>) -> ReconciliationOutput {
+            ReconciliationEngine.compute(.init(
+                serverAssets: [asset("s1", "A")],
+                currentLocalChecksums: [],
+                observedChecksums: checksums("A"),
+                confirmedDeletedAt: pastConfirmed("A"),
+                strictness: strictness,
+                queuedForTrashChecksums: queued
+            ))
+        }
+        for strictness in [DeletionStrictness.autonomous, .trusting, .strict] {
+            let suppressed = compute(strictness, queued: checksums("A"))
+            #expect(suppressed.deleteCandidates.isEmpty)
+            // Not parked in review either — a queued decision belongs in
+            // the pending-trash banner, not back in the review pile.
+            #expect(suppressed.pendingReviewCandidates.isEmpty)
+            // Discard or drain the intent and it returns to the normal path.
+            #expect(!compute(strictness, queued: []).deleteCandidates.isEmpty)
+        }
+    }
 }

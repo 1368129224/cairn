@@ -110,6 +110,22 @@ public struct ReconciliationInput: Sendable {
     /// snapshot. Tests that don't care can omit it.
     public let alivePhoneAssetKeys: Set<AlivePhoneAssetKey>?
 
+    /// Checksums already sitting in the pending-trash retry queue.
+    ///
+    /// A queued intent means the user already decided to trash these and
+    /// the decision is waiting on connectivity — so they must not be
+    /// re-proposed as fresh candidates. Without this, a sync that runs
+    /// while an intent is queued re-derives the same assets, mints a new
+    /// run for them, and the queued intent then retries the same work:
+    /// two runs, same assets, both reporting success because trashing an
+    /// already-trashed asset is a no-op server-side.
+    ///
+    /// Not "silently dropped" — these stay visible to the user in the
+    /// pending-trash banner, which is the accurate place for them. If the
+    /// intent is discarded or drained, they return to the normal
+    /// candidate path on the next sync.
+    public let queuedForTrashChecksums: Set<Checksum>
+
     public init(
         serverAssets: [ServerAsset],
         currentLocalChecksums: Set<Checksum>,
@@ -122,7 +138,8 @@ public struct ReconciliationInput: Sendable {
         observedAlbumTags: [Checksum: Set<String>]? = nil,
         selectedAlbumScope: Set<String>? = nil,
         excludedAtByChecksum: [Checksum: Date]? = nil,
-        alivePhoneAssetKeys: Set<AlivePhoneAssetKey>? = nil
+        alivePhoneAssetKeys: Set<AlivePhoneAssetKey>? = nil,
+        queuedForTrashChecksums: Set<Checksum> = []
     ) {
         self.serverAssets = serverAssets
         self.currentLocalChecksums = currentLocalChecksums
@@ -136,6 +153,7 @@ public struct ReconciliationInput: Sendable {
         self.selectedAlbumScope = selectedAlbumScope
         self.excludedAtByChecksum = excludedAtByChecksum
         self.alivePhoneAssetKeys = alivePhoneAssetKeys
+        self.queuedForTrashChecksums = queuedForTrashChecksums
     }
 }
 
@@ -411,6 +429,15 @@ public enum ReconciliationEngine {
         let postExclusion = wouldBeCandidates.filter { !input.excludedChecksums.contains($0.checksum) }
         let excludedCount = wouldBeCandidates.count - postExclusion.count - recycledCandidates.count
 
+        // Pass 2c: drop anything already queued for trash. The decision
+        // has been made and is waiting on the retry queue; re-proposing
+        // it here is what produced duplicate runs over the same assets.
+        // Applied after exclusions so the excluded-count accounting above
+        // is unaffected.
+        let postQueued = input.queuedForTrashChecksums.isEmpty
+            ? postExclusion
+            : postExclusion.filter { !input.queuedForTrashChecksums.contains($0.checksum) }
+
         // Pass 3: partition the confirmed-deleted map into in-quarantine vs
         // past-quarantine. `quarantineDays <= 0` collapses everything to
         // past-quarantine (held bucket is always empty).
@@ -444,17 +471,17 @@ public enum ReconciliationEngine {
         let held: [ServerAsset]
         switch input.strictness {
         case .autonomous:
-            candidates = postExclusion
+            candidates = postQueued
             pending = []
             held = []
         case .trusting:
-            held = postExclusion.filter { inQuarantine.contains($0.checksum) }
-            candidates = postExclusion.filter { !inQuarantine.contains($0.checksum) }
+            held = postQueued.filter { inQuarantine.contains($0.checksum) }
+            candidates = postQueued.filter { !inQuarantine.contains($0.checksum) }
             pending = held
         case .strict:
-            held = postExclusion.filter { inQuarantine.contains($0.checksum) }
-            candidates = postExclusion.filter { pastQuarantine.contains($0.checksum) }
-            pending = postExclusion.filter { !pastQuarantine.contains($0.checksum) }
+            held = postQueued.filter { inQuarantine.contains($0.checksum) }
+            candidates = postQueued.filter { pastQuarantine.contains($0.checksum) }
+            pending = postQueued.filter { !pastQuarantine.contains($0.checksum) }
         }
 
         let inObserved = input.serverAssets.reduce(into: 0) { count, asset in
