@@ -448,6 +448,78 @@ public struct KeychainSecretStore: MutableSecretStore, Sendable {
         // `clearRecentSessionEmails()` alongside their other wipes.
     }
 
+    // MARK: - Backup eligibility
+
+    /// UserDefaults key holding the user's choice. Owned by the store
+    /// rather than `CairnSettings` so there's exactly one source of
+    /// truth: every write path consults this, so a later credential
+    /// rotation can't silently revert an item to device-only.
+    private static let backupPreferenceKey = "cairn.keychain.backup_eligible_v1"
+
+    /// Accounts that may travel in an encrypted device backup when the
+    /// user opts in — the minimum needed to skip re-onboarding after a
+    /// phone upgrade.
+    ///
+    /// Deliberately not every account. The session token is
+    /// short-lived and re-obtainable, and a live auth token shouldn't
+    /// outlive the device it was issued to. The per-key activation map
+    /// and the recent-servers / recent-emails autocomplete lists are
+    /// device-local convenience with no bearing on reconfiguration.
+    ///
+    /// `userId` is included even though it isn't a credential: it's
+    /// half of cairn's `(URL, userId)` partition key, so carrying it
+    /// over keeps a restored install pointed at the index the backup
+    /// also restored, instead of opening a fresh partition.
+    private var backupEligibleAccounts: [String] {
+        [urlAccount, keyAccount, userIdAccount, userEmailAccount]
+    }
+
+    /// Whether credentials are currently stored so they can travel in
+    /// an encrypted backup. Off by default — `ThisDeviceOnly` stays the
+    /// default posture, and opting in is the user's call.
+    public var isBackupEligible: Bool {
+        UserDefaults.standard.bool(forKey: Self.backupPreferenceKey)
+    }
+
+    /// Opt credentials into (or out of) travelling with an encrypted
+    /// device backup, rewriting the affected items in place.
+    ///
+    /// `ThisDeviceOnly` items are sealed with a device-bound key: they
+    /// are excluded from backups and from device-to-device transfer
+    /// entirely, which is why a phone upgrade always lands on
+    /// onboarding. Dropping that suffix lets the items ride along in an
+    /// encrypted backup. It does *not* enable iCloud Keychain sync —
+    /// that needs `kSecAttrSynchronizable`, which changes item identity
+    /// and is a separate change.
+    ///
+    /// Idempotent, and safe to call when no credentials exist yet: the
+    /// preference is recorded either way, so whatever onboarding writes
+    /// next picks up the right tier.
+    public func setBackupEligible(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: Self.backupPreferenceKey)
+        for account in backupEligibleAccounts {
+            reasertAccessibility(account: account)
+        }
+    }
+
+    /// Accessibility tier for a given account under the current policy.
+    ///
+    /// `AfterFirstUnlock` (rather than `WhenUnlocked`) in both tiers so
+    /// the app can still read credentials when iOS wakes it for
+    /// background sync after the screen has relocked — `WhenUnlocked`
+    /// returns `errSecItemNotFound` for the whole locked window, which
+    /// users saw as an onboarding-screen flash.
+    /// `internal` rather than `private` so tests can assert the policy
+    /// decision directly. macOS runs these against the legacy file
+    /// keychain, which doesn't reliably round-trip `kSecAttrAccessible`,
+    /// so asserting the decision is the portable check.
+    func accessibility(for account: String) -> CFString {
+        guard isBackupEligible, backupEligibleAccounts.contains(account) else {
+            return kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        }
+        return kSecAttrAccessibleAfterFirstUnlock
+    }
+
     // MARK: - Keychain primitives
 
     /// Base query identifying this store's items. Every call narrows
@@ -503,16 +575,12 @@ public struct KeychainSecretStore: MutableSecretStore, Sendable {
             // under a different policy get corrected. Cheap; harmless
             // when the policy already matches.
             //
-            // AfterFirstUnlockThisDeviceOnly (not WhenUnlocked) so the
-            // app can still read credentials when iOS wakes us for
-            // background sync after the screen has relocked. The
-            // WhenUnlocked tier returns errSecItemNotFound (or
-            // errSecInteractionNotAllowed) for the entire locked
-            // window, which surfaced for users as the brief
-            // onboarding-screen flash after a quick relaunch from a
-            // background-launched state. "ThisDeviceOnly" preserves
-            // the no-iCloud-sync guarantee.
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            // Tier comes from `accessibility(for:)` — see there for why
+            // AfterFirstUnlock rather than WhenUnlocked, and for which
+            // accounts the opt-in applies to. Re-asserting it on every
+            // write is what stops a later credential rotation from
+            // quietly reverting an opted-in item to device-only.
+            kSecAttrAccessible as String: accessibility(for: account),
         ]
         let updateStatus = SecItemUpdate(
             baseQuery(account: account) as CFDictionary,
@@ -531,7 +599,7 @@ public struct KeychainSecretStore: MutableSecretStore, Sendable {
 
         var addQuery = baseQuery(account: account)
         addQuery[kSecValueData as String] = data
-        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        addQuery[kSecAttrAccessible as String] = accessibility(for: account)
 
         let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
         guard addStatus == errSecSuccess else {
@@ -539,11 +607,12 @@ public struct KeychainSecretStore: MutableSecretStore, Sendable {
         }
     }
 
-    /// Re-write every Keychain item this store owns with the current
-    /// accessibility tier (`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`).
+    /// Re-write every Keychain item this store owns at whatever tier
+    /// `accessibility(for:)` currently dictates — which, for the
+    /// credential accounts, depends on the user's backup opt-in.
     /// Idempotent and safe to call on every launch. Items already at
-    /// the current tier get their data re-set with the same accessibility
-    /// (no-op effect). Items at the older `WhenUnlocked` tier get upgraded.
+    /// the right tier get their data re-set unchanged (no-op effect).
+    /// Items at the older `WhenUnlocked` tier get upgraded.
     ///
     /// Bootstrap calls this once (gated by a UserDefaults flag) after
     /// the first successful credential read on a build that switched
@@ -583,7 +652,7 @@ public struct KeychainSecretStore: MutableSecretStore, Sendable {
         guard readStatus == errSecSuccess, let data = result as? Data else { return }
         let updateAttrs: [String: Any] = [
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            kSecAttrAccessible as String: accessibility(for: account),
         ]
         _ = SecItemUpdate(baseQuery(account: account) as CFDictionary, updateAttrs as CFDictionary)
     }

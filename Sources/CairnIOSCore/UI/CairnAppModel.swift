@@ -60,6 +60,17 @@ public final class CairnAppModel {
     /// sign-out.
     public var hasSessionToken: Bool = false
 
+    /// `true` when the server URL + API key are stored so they can
+    /// travel in an encrypted device backup, rather than being sealed
+    /// to this device. Drives the Settings → Connection toggle.
+    ///
+    /// Source of truth is `KeychainSecretStore` (the accessibility tier
+    /// on the items themselves), not `CairnSettings` — every Keychain
+    /// write consults it, so a later credential rotation can't silently
+    /// revert the choice. The host reads it on bootstrap and after each
+    /// toggle.
+    public var credentialsTravelInBackups: Bool = false
+
     /// True while a data export or import is serializing/restoring. The
     /// export walks the entire hash cache (100k+ rows) plus journals, so
     /// it's a multi-second silent gap otherwise; Settings shows a spinner
@@ -1385,6 +1396,16 @@ public struct CairnAppActions: Sendable {
         case networkError(message: String)
     }
 
+    /// Opt the stored credentials into (or out of) travelling with an
+    /// encrypted device backup. Rewrites the Keychain items in place
+    /// and refreshes `model.credentialsTravelInBackups`.
+    ///
+    /// Off by default: credentials are sealed to the device, which is
+    /// also why a phone upgrade always lands on onboarding — items
+    /// marked `ThisDeviceOnly` are excluded from backups and device
+    /// transfer entirely.
+    public var setCredentialsTravelInBackups: @Sendable (_ enabled: Bool) async -> Void
+
     /// Sign in via `POST /api/auth/login` to acquire a session token
     /// for the `/sync/*` endpoint family (which Immich rejects on
     /// API-key auth). Token is persisted in Keychain and the
@@ -1498,6 +1519,7 @@ public struct CairnAppActions: Sendable {
         findMissedDeletions: @escaping @Sendable (Date?, Date?, Bool) async throws -> [ServerAsset] = { _, _, _ in [] },
         trashMissedDeletions: @escaping @Sendable ([ServerAsset]) async throws -> Void = { _ in },
         simulateBackgroundRefresh: @escaping @Sendable () async -> Void = {},
+        setCredentialsTravelInBackups: @escaping @Sendable (Bool) async -> Void = { _ in },
         signInForSession: @escaping @Sendable (String, String) async -> SessionSignInResult = { _, _ in .success },
         signOutSession: @escaping @Sendable () async -> Void = {},
         replaceAPIKey: @escaping @Sendable (String) async -> ReplaceKeyResult = { _ in .success }
@@ -1546,6 +1568,7 @@ public struct CairnAppActions: Sendable {
         self.findMissedDeletions = findMissedDeletions
         self.trashMissedDeletions = trashMissedDeletions
         self.simulateBackgroundRefresh = simulateBackgroundRefresh
+        self.setCredentialsTravelInBackups = setCredentialsTravelInBackups
         self.signInForSession = signInForSession
         self.replaceAPIKey = replaceAPIKey
         self.signOutSession = signOutSession

@@ -5,6 +5,14 @@ All notable changes to `cairn` will land here. Format roughly follows [Keep a Ch
 ## [Unreleased]
 
 ### Added
+- **Settings → Connection → "Include credentials in backups"** (off by
+  default). Keychain items are written `ThisDeviceOnly`, which excludes them
+  from encrypted backups and device-to-device transfer — the reason a phone
+  upgrade always lands back on the setup screen. Opting in drops that seal for
+  the server URL, API key, and cached account identity so they restore with a
+  backup. The Immich session token stays device-only regardless. This is
+  backup eligibility, not iCloud sync: credentials are not replicated between
+  devices. Privacy policy updated accordingly.
 - Automated App Store screenshot capture via `make screenshots`. The UITest
   bundle drives the app through Status / Pending Review / Runs / Settings /
   Setup Welcome states with a fixture-mode launch arg that swaps real

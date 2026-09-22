@@ -784,6 +784,12 @@ public struct CairnAppRoot: View {
                 },
                 loadArchivedHistory: model.actions.loadArchivedHistory,
                 hasSessionToken: model.hasSessionToken,
+                credentialsTravelInBackups: model.credentialsTravelInBackups,
+                onSetCredentialsTravelInBackups: { enabled in
+                    Task { @MainActor in
+                        await model.actions.setCredentialsTravelInBackups(enabled)
+                    }
+                },
                 isTransferringData: model.isTransferringData,
                 scrollResetToken: scrollResetTokens["settings"] ?? 0,
                 photoAuthStatus: model.photoAuthStatus

@@ -176,4 +176,88 @@ struct KeychainSecretStoreTests {
         // depth; this test pins the precondition that motivates it.
         #expect(URL(string: badRaw) == nil)
     }
+
+    // MARK: - Backup eligibility
+
+    /// The opt-in is a process-global UserDefaults flag, so restore it
+    /// around each test. The suite is `.serialized`, so this is enough.
+    private func withBackupEligible<T>(_ store: KeychainSecretStore, _ enabled: Bool, _ body: () throws -> T) rethrows -> T {
+        let previous = store.isBackupEligible
+        store.setBackupEligible(enabled)
+        defer { store.setBackupEligible(previous) }
+        return try body()
+    }
+
+    @Test("credentials are device-only by default — the reason a phone upgrade loses them")
+    func deviceOnlyByDefault() throws {
+        let store = makeStore()
+        defer { try? store.clear() }
+
+        withBackupEligible(store, false) {
+            for account in [store.urlAccount, store.keyAccount, store.userIdAccount, store.userEmailAccount] {
+                #expect(store.accessibility(for: account) == kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly)
+            }
+        }
+    }
+
+    @Test("opting in drops ThisDeviceOnly for credentials only, not the session token")
+    func optInCoversCredentialsOnly() throws {
+        let store = makeStore()
+        defer { try? store.clear() }
+
+        withBackupEligible(store, true) {
+            // These are what you'd otherwise have to re-enter.
+            for account in [store.urlAccount, store.keyAccount, store.userIdAccount, store.userEmailAccount] {
+                #expect(store.accessibility(for: account) == kSecAttrAccessibleAfterFirstUnlock)
+            }
+            // A live auth token shouldn't outlive the device it was
+            // issued to, and it's re-obtainable by signing in again.
+            #expect(store.accessibility(for: store.sessionTokenAccount) == kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly)
+        }
+    }
+
+    @Test("opting back out re-seals credentials to the device")
+    func optOutReseals() throws {
+        let store = makeStore()
+        defer { try? store.clear() }
+
+        withBackupEligible(store, true) {
+            #expect(store.accessibility(for: store.keyAccount) == kSecAttrAccessibleAfterFirstUnlock)
+        }
+        // withBackupEligible restored the previous (false) value.
+        #expect(store.accessibility(for: store.keyAccount) == kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly)
+    }
+
+    @Test("rotating the API key after opting in keeps the backup tier")
+    func rotationPreservesTier() throws {
+        // Regression: if the write path hard-coded ThisDeviceOnly, the
+        // next credential rotation would silently revert the user's
+        // choice and the credentials would stop travelling — with no
+        // visible change in the UI.
+        let store = makeStore()
+        defer { try? store.clear() }
+
+        try store.setServerURL(URL(string: "https://immich.example.com")!)
+        try store.setAPIKey("k_before")
+        try withBackupEligible(store, true) {
+            try store.setAPIKey("k_after")
+            #expect(try store.apiKey() == "k_after")
+            #expect(store.accessibility(for: store.keyAccount) == kSecAttrAccessibleAfterFirstUnlock)
+        }
+    }
+
+    @Test("the opt-in survives having no credentials stored yet")
+    func optInWithoutCredentials() throws {
+        // Toggling during onboarding, before anything is written: the
+        // preference still has to stick so the first write picks it up.
+        let store = makeStore()
+        defer { try? store.clear() }
+
+        try withBackupEligible(store, true) {
+            #expect(store.isBackupEligible)
+            try store.setServerURL(URL(string: "https://immich.example.com")!)
+            try store.setAPIKey("k_first")
+            #expect(store.accessibility(for: store.keyAccount) == kSecAttrAccessibleAfterFirstUnlock)
+        }
+    }
 }

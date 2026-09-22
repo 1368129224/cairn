@@ -135,6 +135,13 @@ public struct SettingsScreen: View {
     /// Switches the row label between "Sign in" and "Signed in ·
     /// Sign out".
     public let hasSessionToken: Bool
+
+    /// Whether the stored credentials may travel in an encrypted
+    /// device backup. Backs the Connection-page toggle.
+    public let credentialsTravelInBackups: Bool
+
+    /// Flip that choice. Rewrites the Keychain items in place.
+    public let onSetCredentialsTravelInBackups: (Bool) -> Void
     /// True while an export/import is in flight — drives a spinner on the
     /// Data rows and disables re-tapping.
     public let isTransferringData: Bool
@@ -232,6 +239,8 @@ public struct SettingsScreen: View {
         onInspectAssetByFilename: @escaping (String) -> Void = { _ in },
         loadArchivedHistory: @escaping @Sendable () async -> [CairnFixtures.JournalTailEntry] = { [] },
         hasSessionToken: Bool = false,
+        credentialsTravelInBackups: Bool = false,
+        onSetCredentialsTravelInBackups: @escaping (Bool) -> Void = { _ in },
         isTransferringData: Bool = false,
         scrollResetToken: Int = 0,
         photoAuthStatus: SetupScreen.PhotoAuthOutcome? = nil
@@ -274,6 +283,8 @@ public struct SettingsScreen: View {
         self.onInspectAssetByFilename = onInspectAssetByFilename
         self.loadArchivedHistory = loadArchivedHistory
         self.hasSessionToken = hasSessionToken
+        self.credentialsTravelInBackups = credentialsTravelInBackups
+        self.onSetCredentialsTravelInBackups = onSetCredentialsTravelInBackups
         self.isTransferringData = isTransferringData
         self.scrollResetToken = scrollResetToken
         self.photoAuthStatus = photoAuthStatus
@@ -1182,6 +1193,15 @@ public struct SettingsScreen: View {
                             onTap: onOpenSessionSignIn
                         )
                     }
+                    RowDivider()
+                    ToggleRow(
+                        "Include credentials in backups",
+                        sub: "Lets your server address and API key restore onto a new phone along with an encrypted backup, instead of having to set cairn up again. Off by default, which seals them to this device — that's why an upgrade normally lands you back on the setup screen. This is backup only; it doesn't sync them to your other devices.",
+                        value: Binding(
+                            get: { credentialsTravelInBackups },
+                            set: { onSetCredentialsTravelInBackups($0) }
+                        )
+                    )
                     // Disconnect lives inside the API-key sheet now (the
                     // single home for the server credential lifecycle),
                     // not as its own card row.

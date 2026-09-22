@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Last updated: 2026-04-23_
+_Last updated: 2026-09-22_
 
 `cairn` is a tool for reconciling your iPhone photo library against an [Immich](https://immich.app) server that you run or control. This policy describes what `cairn` does and doesn't do with your data.
 
@@ -9,7 +9,7 @@ _Last updated: 2026-04-23_
 - **`cairn` does not collect any data about you.** No analytics, no crash reporting, no telemetry, no ads.
 - **`cairn` does not operate any servers.** There is no "`cairn` cloud." The iOS app runs on your device; the CLI runs on your computer.
 - **`cairn` only talks to your Immich server.** All network traffic goes to the server URL you configure, authenticated with the API key you provide.
-- **Your credentials stay on your device.** The Immich server URL and API key live in the iOS Keychain on iPhone, or in a `.env` file on your computer for the CLI.
+- **Your credentials stay on your device.** The Immich server URL and API key live in the iOS Keychain on iPhone, or in a `.env` file on your computer for the CLI. By default they are sealed to that one device and are excluded from backups — which is why restoring onto a new phone means setting `cairn` up again. Settings → Connection → "Include credentials in backups" opts out of that seal, so they restore with an encrypted backup. Even then they go only where your backup goes; `cairn` does not sync them between your devices.
 
 ## What `cairn` accesses
 
@@ -19,9 +19,9 @@ _Last updated: 2026-04-23_
 
 ## What `cairn` stores on your device
 
-All of this is local to your device. Nothing is synchronized to a cloud account or a third party.
+All of this is local to your device. Nothing is synchronized to a cloud account or a third party. The one exception is opt-in and explicit: if you turn on "Include credentials in backups," your server URL and API key become eligible for an encrypted device backup, the same as any other app's Keychain data. Everything below stays local regardless.
 
-- **Credentials** — your Immich server URL and API key, in the iOS Keychain.
+- **Credentials** — your Immich server URL and API key, in the iOS Keychain. Sealed to the device unless you opt them into backups (above). Your Immich session token, if you sign in for incremental sync, is always device-only.
 - **SHA1 hash cache** — a local index mapping your iPhone's asset identifiers to their SHA1 checksums, so `cairn` doesn't re-hash every photo on every run.
 - **Ever-seen set** — every SHA1 `cairn` has observed on this device. Used to distinguish "you deleted this" from "this was never yours."
 - **Confirmed-deleted set** — SHA1s that iOS has reported as deleted, plus the timestamp, used to drive the quarantine window.

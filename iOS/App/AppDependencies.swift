@@ -718,6 +718,7 @@ final class AppDependencies {
         model.apiKey = apiKey
         model.apiKeyMasked = AppDependencies.mask(apiKey)
         model.hasSessionToken = (try? secretStore.sessionToken()) != nil
+        model.credentialsTravelInBackups = secretStore.isBackupEligible
         model.settings = (try? await settingsStore.load()) ?? .defaults
 
         // One-time auto-trash opt-out migration. Auto-trash (Balanced /
@@ -6298,6 +6299,16 @@ final class AppDependencies {
                 } catch {
                     bgLog.error("[cairn.bgtask] manual fire failed: \(String(describing: error), privacy: .public)")
                 }
+            },
+            setCredentialsTravelInBackups: { [weak self] enabled in
+                guard let self else { return }
+                self.secretStore.setBackupEligible(enabled)
+                await MainActor.run {
+                    // Read back rather than trusting the argument, so the
+                    // UI reflects what the Keychain actually holds.
+                    self.model.credentialsTravelInBackups = self.secretStore.isBackupEligible
+                }
+                syncLog.notice("[cairn.keychain] credentials backup eligibility set to \(enabled, privacy: .public)")
             },
             signInForSession: { [weak self] email, password in
                 guard let self else { return .networkError(message: "app not ready") }
