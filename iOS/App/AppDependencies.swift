@@ -25,6 +25,21 @@ private final class PhotoLibraryChangeBridge: NSObject, PHPhotoLibraryChangeObse
     func photoLibraryDidChange(_ change: PHChange) { onChange(change) }
 }
 
+/// MainActor-owned state needed by the detached PhotoKit hashing progress callback.
+/// Store actors and checksum values are Sendable, so the snapshot can safely be
+/// used by the callback while the UI model itself stays isolated to MainActor.
+private struct HashProgressSnapshot: Sendable {
+    let hashStore: SwiftDataLocalHashStore
+    let serverSet: Set<Checksum>?
+    let deferredStore: SwiftDataDeferredHashStore?
+    let ceilingBytes: Int64?
+}
+
+private struct SignOutSnapshot: Sendable {
+    let partition: ServerPartitionKey?
+    let thumbnailLoader: ImmichThumbnailLoader?
+}
+
 @MainActor
 @Observable
 final class AppDependencies {
@@ -115,33 +130,10 @@ final class AppDependencies {
             propagationMaxAgeDays: { propagationCutoff },
             maxConcurrentHashes: model.settings.clampedHashConcurrency,
             onHashProgress: { [weak self] done, total, newChecksums in
-                // Fetch all MainActor-isolated state in one hop.
-                struct Snapshot {
-                    let hashStore: SwiftDataLocalHashStore?
-                    let serverSet: Set<Checksum>?
-                    let deferredStore: SwiftDataDeferredHashStore?
-                    let ceilingBytes: Int64?
-                }
-                let snap: Snapshot = await MainActor.run {
-                    guard let self else {
-                        return Snapshot(hashStore: nil, serverSet: nil, deferredStore: nil, ceilingBytes: nil)
-                    }
-                    return Snapshot(
-                        hashStore: self.localHashStore,
-                        serverSet: self.serverChecksumSet,
-                        deferredStore: self.deferredHashStore,
-                        ceilingBytes: Self.megabytesToBytes(self.model.settings.iCloudMaxEverBytesMB)
-                    )
-                }
-                guard let hashStore = snap.hashStore else {
-                    await MainActor.run {
-                        guard let self else { return }
-                        let baseline = self.model.syncProgress?.initialHashed ?? done
-                        let imputed = self.model.syncProgress?.imputed ?? 0
-                        self.model.syncProgress = .init(hashed: done, total: total, initialHashed: baseline, imputed: imputed)
-                    }
-                    return
-                }
+                // Fetch MainActor-owned references in a short actor hop;
+                // the store reads and checksum matching below stay off MainActor.
+                guard let snap = await self?.hashProgressSnapshot() else { return }
+                let hashStore = snap.hashStore
                 let indexed = (try? await hashStore.indexedCount()) ?? 0
                 let batchMatched: Int = {
                     guard let serverSet = snap.serverSet else { return 0 }
@@ -165,74 +157,16 @@ final class AppDependencies {
                         }
                     }
                 }
-                await MainActor.run {
-                    guard let self else { return }
-                    // Optimistic-cancel guard: when the user taps Stop,
-                    // `cancelActiveSync` flips `isSyncing` to false
-                    // immediately, but the reconciler is still unwinding
-                    // and may emit a few more progress callbacks. Don't
-                    // let those re-flip syncProgress / library and cause
-                    // the visible counter to keep ticking after the user
-                    // thinks they stopped. The cache write inside the
-                    // reconciler is independent of this branch — work
-                    // already started still persists.
-                    guard self.model.isSyncing else { return }
-                    // First emit of a session captures the resume baseline
-                    // (i.e. count of cached-from-prior-run assets). The ETA
-                    // computation on InitialScanScreen subtracts this so the
-                    // rate is calculated from session-only work, not work
-                    // that already finished on a prior launch.
-                    let baseline = self.model.syncProgress?.initialHashed ?? done
-                    let imputed = self.model.syncProgress?.imputed ?? 0
-                    self.model.syncProgress = .init(hashed: done, total: total, initialHashed: baseline, imputed: imputed)
-                    let prevMatched = self.model.library.matched
-                    self.model.library = self.model.library
-                        .with(indexed: indexed, matched: prevMatched + batchMatched)
-                    if snap.deferredStore != nil {
-                        self.model.deferredQueue = .init(
-                            count: queueCount,
-                            aboveCeiling: queueAboveCeiling,
-                            totalKnownBytes: queueBytes
-                        )
-                    }
-                    // First-hash detection: flip the high-level phase
-                    // from `.preparing` to `.hashing` the moment we see
-                    // hashing progress. The reconciler runs detached, so
-                    // we can't mark this from the call site; the progress
-                    // callback is the natural signal.
-                    if self.model.syncPhase == .preparing {
-                        self.model.transitionSyncPhase(to: .hashing)
-                    }
-                    // Persist a fresh per-asset rate to UserDefaults
-                    // for the next session's bootstrap ETA. Same warmup
-                    // gates as the on-screen publish (30 assets, 5s) so
-                    // we don't persist noise from the very first emits.
-                    // Live update — the persisted value tracks the
-                    // current session as it progresses, so a relaunch
-                    // mid-scan picks up the freshest rate. UserDefaults
-                    // writes are cheap; no throttling needed.
-                    if let started = self.model.syncStartedAt {
-                        let elapsed = Date().timeIntervalSince(started)
-                        let baseline = self.model.syncProgress?.initialHashed ?? 0
-                        let sessionWork = max(0, done - baseline)
-                        if sessionWork >= 30 && elapsed >= 5 {
-                            let perAssetMs = (elapsed * 1000.0) / Double(sessionWork)
-                            Self.savePersistedSyncRate(perAssetMs)
-                            self.model.persistedSyncRate = perAssetMs
-                        }
-                    }
-                    // Throttled activity-feed emit. `onHashProgress` itself
-                    // is already throttled (every N or every Yms — see
-                    // `progressEveryN` / `progressEveryMs` in the
-                    // reconciler), so this just lifts the same data into
-                    // the user-facing feed.
-                    self.model.appendSyncActivity(.init(
-                        kind: .hashed,
-                        detail: total > 0
-                            ? "\(done.formatted(.number)) / \(total.formatted(.number)) hashed"
-                            : "\(done.formatted(.number)) hashed"
-                    ))
-                }
+                await self?.publishHashProgress(
+                    done: done,
+                    total: total,
+                    indexed: indexed,
+                    batchMatched: batchMatched,
+                    queueCount: queueCount,
+                    queueAboveCeiling: queueAboveCeiling,
+                    queueBytes: queueBytes,
+                    hasDeferredStore: snap.deferredStore != nil
+                )
             },
             onPhaseChange: { [weak self] phaseName, elapsedMs in
                 // Reconciler-internal phase boundaries (fetchPersistentChanges,
@@ -241,39 +175,149 @@ final class AppDependencies {
                 // just closed. Surface them in the activity feed as `.note`
                 // entries so the drill-down sheet shows the granular
                 // progression alongside the high-level phase.
-                guard let self else { return }
-                await MainActor.run {
-                    self.model.appendSyncActivity(.init(
-                        kind: .note,
-                        detail: "\(phaseName) · \(elapsedMs.formatted(.number))ms"
-                    ))
-                }
+                await self?.appendSyncPhaseActivity(phaseName: phaseName, elapsedMs: elapsedMs)
             },
             onHashStarted: { [weak self] assetID, filename, sizeBytes in
-                guard let self else { return }
-                await MainActor.run {
-                    let item = CairnAppModel.HashingItem(
-                        assetID: assetID,
-                        filename: filename,
-                        sizeBytes: sizeBytes,
-                        startedAt: Date()
-                    )
-                    self.model.applyHashEvent(.started(item))
-                }
+                await self?.publishHashStarted(assetID: assetID, filename: filename, sizeBytes: sizeBytes)
             },
             onHashDownloadProgress: { [weak self] assetID, fraction in
-                guard let self else { return }
-                await MainActor.run {
-                    self.model.applyHashEvent(.downloadProgress(assetID: assetID, fraction: fraction))
-                }
+                await self?.publishHashDownloadProgress(assetID: assetID, fraction: fraction)
             },
             onHashFinished: { [weak self] assetID in
-                guard let self else { return }
-                await MainActor.run {
-                    self.model.applyHashEvent(.finished(assetID: assetID))
-                }
+                await self?.publishHashFinished(assetID: assetID)
             }
         )
+    }
+
+    /// Capture the isolated state needed to process one hashing progress event.
+    private func hashProgressSnapshot() -> HashProgressSnapshot {
+        HashProgressSnapshot(
+            hashStore: localHashStore,
+            serverSet: serverChecksumSet,
+            deferredStore: deferredHashStore,
+            ceilingBytes: Self.megabytesToBytes(model.settings.iCloudMaxEverBytesMB)
+        )
+    }
+
+    /// Apply a processed hashing progress event to the UI model.
+    private func publishHashProgress(
+        done: Int,
+        total: Int,
+        indexed: Int,
+        batchMatched: Int,
+        queueCount: Int,
+        queueAboveCeiling: Int,
+        queueBytes: Int64,
+        hasDeferredStore: Bool
+    ) {
+        // Optimistic-cancel guard: when the user taps Stop,
+        // `cancelActiveSync` flips `isSyncing` to false immediately, but the
+        // reconciler may still emit progress while unwinding.
+        guard model.isSyncing else { return }
+        let baseline = model.syncProgress?.initialHashed ?? done
+        let imputed = model.syncProgress?.imputed ?? 0
+        model.syncProgress = .init(hashed: done, total: total, initialHashed: baseline, imputed: imputed)
+        let prevMatched = model.library.matched
+        model.library = model.library.with(indexed: indexed, matched: prevMatched + batchMatched)
+        if hasDeferredStore {
+            model.deferredQueue = .init(
+                count: queueCount,
+                aboveCeiling: queueAboveCeiling,
+                totalKnownBytes: queueBytes
+            )
+        }
+        if model.syncPhase == .preparing {
+            model.transitionSyncPhase(to: .hashing)
+        }
+        if let started = model.syncStartedAt {
+            let elapsed = Date().timeIntervalSince(started)
+            let sessionBaseline = model.syncProgress?.initialHashed ?? 0
+            let sessionWork = max(0, done - sessionBaseline)
+            if sessionWork >= 30 && elapsed >= 5 {
+                let perAssetMs = (elapsed * 1000.0) / Double(sessionWork)
+                Self.savePersistedSyncRate(perAssetMs)
+                model.persistedSyncRate = perAssetMs
+            }
+        }
+        model.appendSyncActivity(.init(
+            kind: .hashed,
+            detail: total > 0
+                ? "\(done.formatted(.number)) / \(total.formatted(.number)) hashed"
+                : "\(done.formatted(.number)) hashed"
+        ))
+    }
+
+    private func appendSyncPhaseActivity(phaseName: String, elapsedMs: Int) {
+        model.appendSyncActivity(.init(
+            kind: .note,
+            detail: "\(phaseName) · \(elapsedMs.formatted(.number))ms"
+        ))
+    }
+
+    private func publishHashStarted(assetID: String, filename: String, sizeBytes: Int64?) {
+        let item = CairnAppModel.HashingItem(
+            assetID: assetID,
+            filename: filename,
+            sizeBytes: sizeBytes,
+            startedAt: Date()
+        )
+        model.applyHashEvent(.started(item))
+    }
+
+    private func publishHashDownloadProgress(assetID: String, fraction: Double) {
+        model.applyHashEvent(.downloadProgress(assetID: assetID, fraction: fraction))
+    }
+
+    private func publishHashFinished(assetID: String) {
+        model.applyHashEvent(.finished(assetID: assetID))
+    }
+
+    private func signOutSnapshot() -> SignOutSnapshot {
+        SignOutSnapshot(partition: currentPartitionKey, thumbnailLoader: thumbnailLoader)
+    }
+
+    private func resetAfterSignOut(keychainErrorMessage: String?) {
+        unregisterPhotoLibraryObserver()
+        immichClient = nil
+        thumbnailLoader = nil
+        currentPartitionKey = nil
+        serverContainer = nil
+        observedStore = nil
+        exclusionStore = nil
+        confirmedDeletedStore = nil
+        quarantinedAssetStore = nil
+        deletionSourceStore = nil
+        tokenStore = nil
+        editRetirementStore = nil
+        statusSnapshotStore = nil
+        pendingTrashStore = nil
+        thumbnailStore = nil
+        journal = nil
+        serverChecksumSet = nil
+        model.needsOnboarding = true
+        model.apiKey = ""
+        model.apiKeyMasked = ""
+        model.serverHost = ""
+        model.serverURL = nil
+        model.hasDismissedInitialScan = false
+        model.journalTail = []
+        model.runs = []
+        model.runAssets = [:]
+        model.reconciliation = nil
+        model.library = .empty
+        model.lastScanBurstCount = 0
+        model.inferredOrphanCount = 0
+        model.lastScanWasTokenExpiryFullEnum = false
+        model.restoredAfterCairnTrash = [:]
+        model.hasCompletedInitialScan = false
+        model.excludedChecksums = []
+        model.lastCheckedAt = nil
+        if let keychainErrorMessage {
+            // Sign-out cleared in-memory state successfully, but the
+            // credential delete from Keychain failed. Surface that the
+            // saved key may still be on this device.
+            model.lastError = "Sign-out couldn't fully clear the saved credentials. (\(keychainErrorMessage))"
+        }
     }
 
     nonisolated static let massOffloadRecentWindow: TimeInterval = 24 * 60 * 60
@@ -5601,55 +5645,13 @@ final class AppDependencies {
                 // bootstrap signal even if they hit the same partition
                 // key. Per-partition state cleanup; doesn't touch
                 // other partitions' markers.
-                if let partition = await MainActor.run(body: { self?.currentPartitionKey }) {
+                let snapshot = await self?.signOutSnapshot()
+                if let partition = snapshot?.partition {
                     AppDependencies.clearImputationCompletion(for: partition)
                 }
-                await self?.thumbnailLoader?.clearCache()
-                await MainActor.run {
-                    guard let self else { return }
-                    self.unregisterPhotoLibraryObserver()
-                    self.immichClient = nil
-                    self.thumbnailLoader = nil
-                    self.currentPartitionKey = nil
-                    self.serverContainer = nil
-                    self.observedStore = nil
-                    self.exclusionStore = nil
-                    self.confirmedDeletedStore = nil
-                    self.quarantinedAssetStore = nil
-                    self.deletionSourceStore = nil
-                    self.tokenStore = nil
-                    self.editRetirementStore = nil
-                    self.statusSnapshotStore = nil
-                    self.pendingTrashStore = nil
-                    self.thumbnailStore = nil
-                    self.journal = nil
-                    self.serverChecksumSet = nil
-                    self.model.needsOnboarding = true
-                    self.model.apiKey = ""
-                    self.model.apiKeyMasked = ""
-                    self.model.serverHost = ""
-                    self.model.serverURL = nil
-                    self.model.hasDismissedInitialScan = false
-                    self.model.journalTail = []
-                    self.model.runs = []
-                    self.model.runAssets = [:]
-                    self.model.reconciliation = nil
-                    self.model.library = .empty
-                    self.model.lastScanBurstCount = 0
-                    self.model.inferredOrphanCount = 0
-                    self.model.lastScanWasTokenExpiryFullEnum = false
-                    self.model.restoredAfterCairnTrash = [:]
-                    self.model.hasCompletedInitialScan = false
-                    self.model.excludedChecksums = []
-                    self.model.lastCheckedAt = nil
-                    if let keychainError {
-                        // Sign-out cleared in-memory state successfully,
-                        // but the credential delete from Keychain failed.
-                        // Surface so the user knows their key may still
-                        // be on this device.
-                        self.model.lastError = "Sign-out couldn't fully clear the saved credentials. (\(Self.describeSyncError(keychainError)))"
-                    }
-                }
+                await snapshot?.thumbnailLoader?.clearCache()
+                let keychainErrorMessage = keychainError.map(Self.describeSyncError)
+                await self?.resetAfterSignOut(keychainErrorMessage: keychainErrorMessage)
             },
             rescanLibrary: { [weak self] in
                 guard let self else { return }
