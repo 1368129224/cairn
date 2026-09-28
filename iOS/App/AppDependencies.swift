@@ -254,7 +254,7 @@ final class AppDependencies {
         ))
     }
 
-    private func publishHashStarted(assetID: String, filename: String, sizeBytes: Int64?) {
+    private func publishHashStarted(assetID: String, filename: String, sizeBytes: Int64) {
         let item = CairnAppModel.HashingItem(
             assetID: assetID,
             filename: filename,
