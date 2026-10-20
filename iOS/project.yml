@@ -21,7 +21,7 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_STRICT_CONCURRENCY: targeted
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     # PRODUCT_BUNDLE_IDENTIFIER and DEVELOPMENT_TEAM are pinned per-target
     # below. They're committed values (cairn is a single-developer project

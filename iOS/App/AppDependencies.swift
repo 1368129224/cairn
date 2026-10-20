@@ -81,6 +81,63 @@ final class AppDependencies {
     private(set) var serverAssetSyncCoordinator: ServerAssetSyncCoordinator?
     private(set) var journal: DeletionJournal?
 
+    @MainActor
+    private func updateReconcilerHashProgress(done: Int, total: Int, newChecksums: Set<Checksum>) async {
+        let hashStore = self.localHashStore
+        let snapServerSet = self.serverChecksumSet
+        let deferredStore = self.deferredHashStore
+        let ceilingBytes = Self.megabytesToBytes(self.model.settings.iCloudMaxEverBytesMB)
+
+        let indexed = (try? await hashStore.indexedCount()) ?? 0
+        let batchMatched: Int = {
+            guard let serverSet = snapServerSet else { return 0 }
+            return newChecksums.filter { serverSet.contains($0) }.count
+        }()
+        var queueCount = 0
+        var queueAboveCeiling = 0
+        var queueBytes: Int64 = 0
+        let entries = (try? await deferredStore.snapshot()) ?? []
+        for entry in entries {
+            if let cb = ceilingBytes, let size = entry.sizeBytes, size > cb {
+                queueAboveCeiling += 1
+            } else {
+                queueCount += 1
+                if let size = entry.sizeBytes { queueBytes += size }
+            }
+        }
+        guard self.model.isSyncing else { return }
+        let baseline = self.model.syncProgress?.initialHashed ?? done
+        let imputed = self.model.syncProgress?.imputed ?? 0
+        self.model.syncProgress = .init(hashed: done, total: total, initialHashed: baseline, imputed: imputed)
+        let prevMatched = self.model.library.matched
+        self.model.library = self.model.library
+            .with(indexed: indexed, matched: prevMatched + batchMatched)
+        self.model.deferredQueue = .init(
+            count: queueCount,
+            aboveCeiling: queueAboveCeiling,
+            totalKnownBytes: queueBytes
+        )
+        if self.model.syncPhase == .preparing {
+            self.model.transitionSyncPhase(to: .hashing)
+        }
+        if let started = self.model.syncStartedAt {
+            let elapsed = Date().timeIntervalSince(started)
+            let baseline = self.model.syncProgress?.initialHashed ?? 0
+            let sessionWork = max(0, done - baseline)
+            if sessionWork >= 30 && elapsed >= 5 {
+                let perAssetMs = (elapsed * 1000.0) / Double(sessionWork)
+                Self.savePersistedSyncRate(perAssetMs)
+                self.model.persistedSyncRate = perAssetMs
+            }
+        }
+        self.model.appendSyncActivity(.init(
+            kind: .hashed,
+            detail: total > 0
+                ? "\(done.formatted(.number)) / \(total.formatted(.number)) hashed"
+                : "\(done.formatted(.number)) hashed"
+        ))
+    }
+
     var persistentChangeReconciler: PhotoKitPersistentChangeReconciler? {
         guard let confirmed = confirmedDeletedStore,
               let observed = observedStore,
@@ -115,124 +172,7 @@ final class AppDependencies {
             propagationMaxAgeDays: { propagationCutoff },
             maxConcurrentHashes: model.settings.clampedHashConcurrency,
             onHashProgress: { [weak self] done, total, newChecksums in
-                // Fetch all MainActor-isolated state in one hop.
-                struct Snapshot {
-                    let hashStore: SwiftDataLocalHashStore?
-                    let serverSet: Set<Checksum>?
-                    let deferredStore: SwiftDataDeferredHashStore?
-                    let ceilingBytes: Int64?
-                }
-                let snap: Snapshot = await MainActor.run {
-                    guard let self else {
-                        return Snapshot(hashStore: nil, serverSet: nil, deferredStore: nil, ceilingBytes: nil)
-                    }
-                    return Snapshot(
-                        hashStore: self.localHashStore,
-                        serverSet: self.serverChecksumSet,
-                        deferredStore: self.deferredHashStore,
-                        ceilingBytes: Self.megabytesToBytes(self.model.settings.iCloudMaxEverBytesMB)
-                    )
-                }
-                guard let hashStore = snap.hashStore else {
-                    await MainActor.run {
-                        guard let self else { return }
-                        let baseline = self.model.syncProgress?.initialHashed ?? done
-                        let imputed = self.model.syncProgress?.imputed ?? 0
-                        self.model.syncProgress = .init(hashed: done, total: total, initialHashed: baseline, imputed: imputed)
-                    }
-                    return
-                }
-                let indexed = (try? await hashStore.indexedCount()) ?? 0
-                let batchMatched: Int = {
-                    guard let serverSet = snap.serverSet else { return 0 }
-                    return newChecksums.filter { serverSet.contains($0) }.count
-                }()
-                // Recompute deferred queue counts so the sync card's
-                // "queued" line ticks down live as items get removed
-                // per-asset by the drain loop. Without this the label
-                // stays stale until end-of-drain.
-                var queueCount = 0
-                var queueAboveCeiling = 0
-                var queueBytes: Int64 = 0
-                if let deferredStore = snap.deferredStore {
-                    let entries = (try? await deferredStore.snapshot()) ?? []
-                    for entry in entries {
-                        if let cb = snap.ceilingBytes, let size = entry.sizeBytes, size > cb {
-                            queueAboveCeiling += 1
-                        } else {
-                            queueCount += 1
-                            if let size = entry.sizeBytes { queueBytes += size }
-                        }
-                    }
-                }
-                await MainActor.run {
-                    guard let self else { return }
-                    // Optimistic-cancel guard: when the user taps Stop,
-                    // `cancelActiveSync` flips `isSyncing` to false
-                    // immediately, but the reconciler is still unwinding
-                    // and may emit a few more progress callbacks. Don't
-                    // let those re-flip syncProgress / library and cause
-                    // the visible counter to keep ticking after the user
-                    // thinks they stopped. The cache write inside the
-                    // reconciler is independent of this branch — work
-                    // already started still persists.
-                    guard self.model.isSyncing else { return }
-                    // First emit of a session captures the resume baseline
-                    // (i.e. count of cached-from-prior-run assets). The ETA
-                    // computation on InitialScanScreen subtracts this so the
-                    // rate is calculated from session-only work, not work
-                    // that already finished on a prior launch.
-                    let baseline = self.model.syncProgress?.initialHashed ?? done
-                    let imputed = self.model.syncProgress?.imputed ?? 0
-                    self.model.syncProgress = .init(hashed: done, total: total, initialHashed: baseline, imputed: imputed)
-                    let prevMatched = self.model.library.matched
-                    self.model.library = self.model.library
-                        .with(indexed: indexed, matched: prevMatched + batchMatched)
-                    if snap.deferredStore != nil {
-                        self.model.deferredQueue = .init(
-                            count: queueCount,
-                            aboveCeiling: queueAboveCeiling,
-                            totalKnownBytes: queueBytes
-                        )
-                    }
-                    // First-hash detection: flip the high-level phase
-                    // from `.preparing` to `.hashing` the moment we see
-                    // hashing progress. The reconciler runs detached, so
-                    // we can't mark this from the call site; the progress
-                    // callback is the natural signal.
-                    if self.model.syncPhase == .preparing {
-                        self.model.transitionSyncPhase(to: .hashing)
-                    }
-                    // Persist a fresh per-asset rate to UserDefaults
-                    // for the next session's bootstrap ETA. Same warmup
-                    // gates as the on-screen publish (30 assets, 5s) so
-                    // we don't persist noise from the very first emits.
-                    // Live update — the persisted value tracks the
-                    // current session as it progresses, so a relaunch
-                    // mid-scan picks up the freshest rate. UserDefaults
-                    // writes are cheap; no throttling needed.
-                    if let started = self.model.syncStartedAt {
-                        let elapsed = Date().timeIntervalSince(started)
-                        let baseline = self.model.syncProgress?.initialHashed ?? 0
-                        let sessionWork = max(0, done - baseline)
-                        if sessionWork >= 30 && elapsed >= 5 {
-                            let perAssetMs = (elapsed * 1000.0) / Double(sessionWork)
-                            Self.savePersistedSyncRate(perAssetMs)
-                            self.model.persistedSyncRate = perAssetMs
-                        }
-                    }
-                    // Throttled activity-feed emit. `onHashProgress` itself
-                    // is already throttled (every N or every Yms — see
-                    // `progressEveryN` / `progressEveryMs` in the
-                    // reconciler), so this just lifts the same data into
-                    // the user-facing feed.
-                    self.model.appendSyncActivity(.init(
-                        kind: .hashed,
-                        detail: total > 0
-                            ? "\(done.formatted(.number)) / \(total.formatted(.number)) hashed"
-                            : "\(done.formatted(.number)) hashed"
-                    ))
-                }
+                await self?.updateReconcilerHashProgress(done: done, total: total, newChecksums: newChecksums)
             },
             onPhaseChange: { [weak self] phaseName, elapsedMs in
                 // Reconciler-internal phase boundaries (fetchPersistentChanges,
@@ -5836,61 +5776,7 @@ final class AppDependencies {
                 // sign-out is the documented exit path back to real
                 // onboarding.
                 AppDependencies.setReviewModeActive(false)
-                // Drop the imputation-completion marker for the
-                // partition we're signing out of, so the next user
-                // (or this user re-signing-in) starts with a clean
-                // bootstrap signal even if they hit the same partition
-                // key. Per-partition state cleanup; doesn't touch
-                // other partitions' markers.
-                if let partition = await MainActor.run(body: { self?.currentPartitionKey }) {
-                    AppDependencies.clearImputationCompletion(for: partition)
-                }
-                await self?.thumbnailLoader?.clearCache()
-                await MainActor.run {
-                    guard let self else { return }
-                    self.unregisterPhotoLibraryObserver()
-                    self.immichClient = nil
-                    self.thumbnailLoader = nil
-                    self.currentPartitionKey = nil
-                    self.serverContainer = nil
-                    self.observedStore = nil
-                    self.exclusionStore = nil
-                    self.confirmedDeletedStore = nil
-                    self.quarantinedAssetStore = nil
-                    self.deletionSourceStore = nil
-                    self.tokenStore = nil
-                    self.editRetirementStore = nil
-                    self.statusSnapshotStore = nil
-                    self.pendingTrashStore = nil
-                    self.thumbnailStore = nil
-                    self.journal = nil
-                    self.serverChecksumSet = nil
-                    self.model.needsOnboarding = true
-                    self.model.apiKey = ""
-                    self.model.apiKeyMasked = ""
-                    self.model.serverHost = ""
-                    self.model.serverURL = nil
-                    self.model.hasDismissedInitialScan = false
-                    self.model.journalTail = []
-                    self.model.runs = []
-                    self.model.runAssets = [:]
-                    self.model.reconciliation = nil
-                    self.model.library = .empty
-                    self.model.lastScanBurstCount = 0
-                    self.model.inferredOrphanCount = 0
-                    self.model.lastScanWasTokenExpiryFullEnum = false
-                    self.model.restoredAfterCairnTrash = [:]
-                    self.model.hasCompletedInitialScan = false
-                    self.model.excludedChecksums = []
-                    self.model.lastCheckedAt = nil
-                    if let keychainError {
-                        // Sign-out cleared in-memory state successfully,
-                        // but the credential delete from Keychain failed.
-                        // Surface so the user knows their key may still
-                        // be on this device.
-                        self.model.lastError = "Sign-out couldn't fully clear the saved credentials. (\(Self.describeSyncError(keychainError)))"
-                    }
-                }
+                await self?.performSignOutCleanup(keychainError: keychainError)
             },
             rescanLibrary: { [weak self] in
                 guard let self else { return }
@@ -7034,6 +6920,52 @@ final class AppDependencies {
 
         if clearReconciliation {
             model.reconciliation = nil
+        }
+    }
+
+    @MainActor
+    private func performSignOutCleanup(keychainError: Swift.Error?) async {
+        if let partition = self.currentPartitionKey {
+            AppDependencies.clearImputationCompletion(for: partition)
+        }
+        await self.thumbnailLoader?.clearCache()
+        self.unregisterPhotoLibraryObserver()
+        self.immichClient = nil
+        self.thumbnailLoader = nil
+        self.currentPartitionKey = nil
+        self.serverContainer = nil
+        self.observedStore = nil
+        self.exclusionStore = nil
+        self.confirmedDeletedStore = nil
+        self.quarantinedAssetStore = nil
+        self.deletionSourceStore = nil
+        self.tokenStore = nil
+        self.editRetirementStore = nil
+        self.statusSnapshotStore = nil
+        self.pendingTrashStore = nil
+        self.thumbnailStore = nil
+        self.journal = nil
+        self.serverChecksumSet = nil
+        self.model.needsOnboarding = true
+        self.model.apiKey = ""
+        self.model.apiKeyMasked = ""
+        self.model.serverHost = ""
+        self.model.serverURL = nil
+        self.model.hasDismissedInitialScan = false
+        self.model.journalTail = []
+        self.model.runs = []
+        self.model.runAssets = [:]
+        self.model.reconciliation = nil
+        self.model.library = .empty
+        self.model.lastScanBurstCount = 0
+        self.model.inferredOrphanCount = 0
+        self.model.lastScanWasTokenExpiryFullEnum = false
+        self.model.restoredAfterCairnTrash = [:]
+        self.model.hasCompletedInitialScan = false
+        self.model.excludedChecksums = []
+        self.model.lastCheckedAt = nil
+        if let keychainError {
+            self.model.lastError = "Sign-out couldn't fully clear the saved credentials. (\(Self.describeSyncError(keychainError)))"
         }
     }
 

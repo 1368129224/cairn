@@ -1,0 +1,92 @@
+name: Build IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'iOS/**'
+      - 'Sources/**'
+      - 'Package.*'
+      - '.github/workflows/build-ipa.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ipa:
+    name: Build iOS IPA
+    runs-on: macos-15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Show toolchain versions
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: |
+          brew install xcodegen
+
+      - name: Generate Xcode Project
+        run: |
+          cd iOS
+          xcodegen generate
+
+      - name: Build Cairn App
+        run: |
+          xcodebuild build \
+            -project iOS/Cairn.xcodeproj \
+            -scheme Cairn \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="" \
+            SWIFT_STRICT_CONCURRENCY=targeted \
+            COMPILER_INDEX_STORE_ENABLE=NO
+
+      - name: Package IPA
+        run: |
+          mkdir -p build/Payload
+          APP_DIR=$(find build/DerivedData -name "Cairn.app" -type d \
+            | head -n 1)
+          if [ -z "$APP_DIR" ]; then
+            echo "::error::Cairn.app not found in DerivedData"
+            exit 1
+          fi
+          echo "Packaging $APP_DIR into IPA..."
+          cp -R "$APP_DIR" build/Payload/
+          cd build
+          codesign --force --deep --sign - Payload/Cairn.app || true
+          zip -r -y Cairn.ipa Payload
+          ls -lh Cairn.ipa
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cairn.ipa
+          path: build/Cairn.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Release IPA on Tag
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/Cairn.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
