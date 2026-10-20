@@ -183,20 +183,20 @@ public struct SettingsScreen: View {
     /// `some View` resolution past Swift's reasonable-time budget.
     @ViewBuilder
     private var inspectAssetAlertActions: some View {
-        TextField("e.g. IMG_1234.MOV", text: $inspectAssetFilename)
+        TextField("e.g. IMG_1234.MOV".loc, text: $inspectAssetFilename)
             .autocorrectionDisabled()
-        Button("Inspect") {
+        Button("Inspect".loc) {
             let trimmed = inspectAssetFilename.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return }
             onInspectAssetByFilename(trimmed)
             inspectAssetFilename = ""
         }
-        Button("Cancel", role: .cancel) { inspectAssetFilename = "" }
+        Button("Cancel".loc, role: .cancel) { inspectAssetFilename = "" }
     }
 
     @ViewBuilder
     private var inspectAssetAlertMessage: some View {
-        Text("Dumps every phone-side PHAsset and Immich server entry matching this filename to the diagnostic log. Then export logs (above) to share for triage. Case-insensitive match against PHAsset's internal filename + every PHAssetResource originalFilename.")
+        Text("Dumps every phone-side PHAsset and Immich server entry matching this filename to the diagnostic log. Then export logs (above) to share for triage. Case-insensitive match against PHAsset's internal filename + every PHAssetResource originalFilename.".loc)
     }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -311,7 +311,7 @@ public struct SettingsScreen: View {
                     }
                 }
             }
-            .navigationTitle("Settings")
+            .navigationTitle("Settings".loc)
             .cairnNavigationTitleDisplayMode(.large)
             .background(t.bg)
             // Value-based navigation destination for search results.
@@ -330,7 +330,7 @@ public struct SettingsScreen: View {
             // under the large title on iOS. Skipping the iOS-only
             // `.navigationBarDrawer` placement so the same source
             // compiles for macOS tooling / preview builds too.
-            .searchable(text: $searchText, prompt: "Search settings")
+            .searchable(text: $searchText, prompt: "Search settings".loc)
             // Keyboard dismissal: drag down on the list to interactively
             // drag the keyboard away, or tap any empty chrome outside
             // the focused field. Together these replace the explicit
@@ -352,82 +352,90 @@ public struct SettingsScreen: View {
         // arbitrary source view, which reads as visual chaos. Alerts
         // are always centered, no anchor, unambiguous.
         .alert(
-            "Reset index?",
+            "Reset index?".loc,
             isPresented: $pendingResetIndex,
             actions: {
-                Button("Cancel", role: .cancel) {}
-                Button("This account", role: .destructive) { onResetIndex() }
-                Button("All accounts on this device", role: .destructive) { onResetIndexAllAccounts() }
+                Button("Cancel".loc, role: .cancel) {}
+                Button("This account".loc, role: .destructive) { onResetIndex() }
+                Button("All accounts on this device".loc, role: .destructive) { onResetIndexAllAccounts() }
             },
             message: {
-                Text("This account: clears the SHA1 cache, change-tracking baseline, observed set, and quarantine state for the active Immich account. Exclusions, credentials, and saved servers are kept; the next sync re-hashes your library.\n\nAll accounts: also wipes every other (URL, user) partition cairn has cached on this device, plus the active account's exclusions and the saved-servers list. Use after a shared/dev-device cleanup.")
+                Text("This account: clears the SHA1 cache, change-tracking baseline, observed set, and quarantine state for the active Immich account. Exclusions, credentials, and saved servers are kept; the next sync re-hashes your library.\n\nAll accounts: also wipes every other (URL, user) partition cairn has cached on this device, plus the active account's exclusions and the saved-servers list. Use after a shared/dev-device cleanup.".loc)
             }
         )
         .alert(
-            "Rescan library?",
+            "Rescan library?".loc,
             isPresented: $pendingRescanLibrary,
             actions: {
-                Button("Cancel", role: .cancel) {}
-                Button("Rescan") { onRescanLibrary() }
+                Button("Cancel".loc, role: .cancel) {}
+                Button("Rescan".loc) { onRescanLibrary() }
             },
             message: {
-                Text("Clears the change-tracking baseline and deferred-hash queue. The next sync re-enumerates every photo against your current size limits. Use this after raising the iCloud limits to apply them immediately; otherwise background scans catch up on their own.")
+                Text("Clears the change-tracking baseline and deferred-hash queue. The next sync re-enumerates every photo against your current size limits. Use this after raising the iCloud limits to apply them immediately; otherwise background scans catch up on their own.".loc)
             }
         )
         .alert(
-            "Clear hash cache?",
+            "Clear hash cache?".loc,
             isPresented: $pendingClearHashCache,
             actions: {
-                Button("Cancel", role: .cancel) {}
-                Button("Clear", role: .destructive) { onClearHashCache() }
+                Button("Cancel".loc, role: .cancel) {}
+                Button("Clear".loc, role: .destructive) { onClearHashCache() }
             },
             message: {
-                Text("Drops every cached SHA1 and the change-tracking baseline. The next sync re-hashes every photo (or imputes from server checksums if fast initial scan is on). Observed history, active quarantine, exclusions, and credentials are all kept. Useful for testing fast initial scan on an already-indexed library; otherwise rarely needed.")
+                Text("Drops every cached SHA1 and the change-tracking baseline. The next sync re-hashes every photo (or imputes from server checksums if fast initial scan is on). Observed history, active quarantine, exclusions, and credentials are all kept. Useful for testing fast initial scan on an already-indexed library; otherwise rarely needed.".loc)
             }
         )
         .alert(
-            "Re-hash imputed entries?",
+            "Re-hash imputed entries?".loc,
             isPresented: $pendingVerifyImputed,
             actions: {
-                Button("Cancel", role: .cancel) {}
-                Button("Re-hash") { onVerifyImputedChecksums() }
+                Button("Cancel".loc, role: .cancel) {}
+                Button("Re-hash".loc) { onVerifyImputedChecksums() }
             },
             message: {
-                Text("Drops the \(library.imputed.formatted(.number)) trust-seeded SHA1\(library.imputed == 1 ? "" : "s") that cairn imported from Immich's server. The next sync re-hashes those photos locally — on iCloud-Optimized libraries this can take a while because each one's original needs to be downloaded. Locally verified rows are untouched. Use this if you want every checksum computed by cairn itself rather than trusted from the server.")
+                if CairnL10n.isChinese {
+                    Text("清除 cairn 从 Immich 服务器导入的 \(library.imputed.formatted(.number)) 项信任植入的 SHA1。下次同步将在本地重新计算这些照片的哈希 — 在优化 iPhone 储存空间的照片库中这可能需要一段时间，因为每张照片的原始文件都需要下载。本地验证的条目不受影响。如果你希望每个校验和都由 cairn 本身计算而非信任服务器，请使用此选项。")
+                } else {
+                    Text("Drops the \(library.imputed.formatted(.number)) trust-seeded SHA1\(library.imputed == 1 ? "" : "s") that cairn imported from Immich's server. The next sync re-hashes those photos locally — on iCloud-Optimized libraries this can take a while because each one's original needs to be downloaded. Locally verified rows are untouched. Use this if you want every checksum computed by cairn itself rather than trusted from the server.")
+                }
             }
         )
         .alert(
-            "Clear journal?",
+            "Clear journal?".loc,
             isPresented: $pendingClearJournal,
             actions: {
-                Button("Cancel", role: .cancel) {}
-                Button("This key", role: .destructive) { onClearJournal() }
-                Button("All keys (delete file)", role: .destructive) { onClearJournalAllKeys() }
+                Button("Cancel".loc, role: .cancel) {}
+                Button("This key".loc, role: .destructive) { onClearJournal() }
+                Button("All keys (delete file)".loc, role: .destructive) { onClearJournalAllKeys() }
             },
             message: {
-                Text("This key: hides existing runs from the active API key's view. Other keys on this account still see their own history if you rotate back. The on-disk journal is preserved.\n\nAll keys: deletes deletion-journal.jsonl from disk. Past runs disappear from every key's view, permanently.")
+                Text("This key: hides existing runs from the active API key's view. Other keys on this account still see their own history if you rotate back. The on-disk journal is preserved.\n\nAll keys: deletes deletion-journal.jsonl from disk. Past runs disappear from every key's view, permanently.".loc)
             }
         )
         .alert(
-            "Clear saved servers?",
+            "Clear saved servers?".loc,
             isPresented: $pendingClearRecentServers,
             actions: {
-                Button("Cancel", role: .cancel) {}
-                Button("Clear", role: .destructive) { onClearRecentServers() }
+                Button("Cancel".loc, role: .cancel) {}
+                Button("Clear".loc, role: .destructive) { onClearRecentServers() }
             },
             message: {
-                Text("Wipes the saved server URLs and sign-in emails used for autocomplete. Credentials, indexed state, journal, and exclusions are kept.")
+                Text("Wipes the saved server URLs and sign-in emails used for autocomplete. Credentials, indexed state, journal, and exclusions are kept.".loc)
             }
         )
         .alert(
-            "Clear excluded assets?",
+            "Clear excluded assets?".loc,
             isPresented: $pendingClearExclusions,
             actions: {
-                Button("Cancel", role: .cancel) {}
-                Button("Clear all \(excludedCount)", role: .destructive) { onClearExclusions() }
+                Button("Cancel".loc, role: .cancel) {}
+                Button(CairnL10n.isChinese ? "清除全部 \(excludedCount)" : "Clear all \(excludedCount)", role: .destructive) { onClearExclusions() }
             },
             message: {
-                Text("Removes all \(excludedCount) excluded checksums for this account. The index, journal, credentials, and saved servers are kept. Excluded items will start flowing through reconciliation again on the next sync — including any that were previously preserved via restore-via-cairn.")
+                if CairnL10n.isChinese {
+                    Text("移除此账户的所有 \(excludedCount) 个已排除校验和。索引、日志、凭据和已保存服务器都将保留。已排除项目将在下次同步时重新参与核对 — 包括之前通过 cairn 还原保留的项目。")
+                } else {
+                    Text("Removes all \(excludedCount) excluded checksums for this account. The index, journal, credentials, and saved servers are kept. Excluded items will start flowing through reconciliation again on the next sync — including any that were previously preserved via restore-via-cairn.")
+                }
             }
         )
         // `.alert` rather than `.confirmationDialog` — on iOS 26 the
@@ -435,19 +443,19 @@ public struct SettingsScreen: View {
         // view SwiftUI picks, often unrelated to the tapped row. Same
         // reasoning as the destructive confirmations above.
         .alert(
-            "Export scope",
+            "Export scope".loc,
             isPresented: $showExportPicker,
             actions: {
-                Button("Current server") { onExportData(.currentServer) }
-                Button("All servers") { onExportData(.allServers) }
-                Button("Cancel", role: .cancel) {}
+                Button("Current server".loc) { onExportData(.currentServer) }
+                Button("All servers".loc) { onExportData(.allServers) }
+                Button("Cancel".loc, role: .cancel) {}
             },
             message: {
-                Text("Current server backs up only the active Immich account's state. All servers includes every (URL, user) partition on this device.")
+                Text("Current server backs up only the active Immich account's state. All servers includes every (URL, user) partition on this device.".loc)
             }
         )
         .alert(
-            "Inspect asset by filename",
+            "Inspect asset by filename".loc,
             isPresented: $showInspectAssetAlert,
             actions: { inspectAssetAlertActions },
             message: { inspectAssetAlertMessage }
@@ -496,6 +504,7 @@ public struct SettingsScreen: View {
         case library
         case safetyLimits
         case appearance
+        case language
         case dataAndRecovery
         case advanced
         case about
@@ -569,6 +578,10 @@ public struct SettingsScreen: View {
               keywords: ["light", "dark", "system", "theme"], page: .appearance),
         .init(id: "appearance.time", title: "Time format", breadcrumb: "Appearance",
               keywords: ["12 hour", "24 hour", "clock"], page: .appearance),
+
+        // Language
+        .init(id: "language.selection", title: "Language", breadcrumb: "Language",
+              keywords: ["language", "chinese", "english", "locale", "中文", "语言"], page: .language),
 
         // Data & recovery
         .init(id: "data.export", title: "Export data", breadcrumb: "Data & recovery",
@@ -703,6 +716,7 @@ public struct SettingsScreen: View {
         case .library: libraryPage
         case .safetyLimits: safetyLimitsPage
         case .appearance: appearancePage
+        case .language: languagePage
         case .dataAndRecovery: dataAndRecoveryPage
         case .advanced: advancedPage
         case .about: aboutPage
@@ -721,7 +735,7 @@ public struct SettingsScreen: View {
     @ViewBuilder
     private var quickSettingsCard: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("QUICK SETTINGS")
+            Text("QUICK SETTINGS".loc)
                 .font(.cairnScaled(size: 11, weight: .semibold))
                 .tracking(0.9)
                 .foregroundStyle(t.textMuted)
@@ -746,7 +760,7 @@ public struct SettingsScreen: View {
             SettingsCategoryRow(
                 icon: "network",
                 iconTint: t.info,
-                title: "Connection",
+                title: "Connection".loc,
                 summary: connectionSummary
             ) { connectionPage }
 
@@ -755,7 +769,7 @@ public struct SettingsScreen: View {
             SettingsCategoryRow(
                 icon: "photo.on.rectangle.angled",
                 iconTint: t.primary,
-                title: "Library",
+                title: "Library".loc,
                 summary: librarySummary
             ) { libraryPage }
 
@@ -764,7 +778,7 @@ public struct SettingsScreen: View {
             SettingsCategoryRow(
                 icon: "shield",
                 iconTint: t.verified,
-                title: "Safety & limits",
+                title: "Safety & limits".loc,
                 summary: safetyLimitsSummary
             ) { safetyLimitsPage }
 
@@ -773,35 +787,34 @@ public struct SettingsScreen: View {
             SettingsCategoryRow(
                 icon: "paintpalette",
                 iconTint: t.accent,
-                title: "Appearance",
+                title: "Appearance".loc,
                 summary: appearanceSummary
             ) { appearancePage }
 
             RowDivider()
 
-            // Data + Recovery merged. Both are about moving state
-            // around / getting back to a known-good place; the two
-            // were artificially separate in Phase 1.
+            SettingsCategoryRow(
+                icon: "globe",
+                iconTint: t.info,
+                title: "Language".loc,
+                summary: languageSummary
+            ) { languagePage }
+
+            RowDivider()
+
             SettingsCategoryRow(
                 icon: "arrow.up.arrow.down",
                 iconTint: t.quiet,
-                title: "Data & recovery",
+                title: "Data & recovery".loc,
                 summary: dataAndRecoverySummary
             ) { dataAndRecoveryPage }
 
             RowDivider()
 
-            // Advanced now contains the Danger zone subsection at
-            // the bottom. Power-user surface in one place — both the
-            // tunable knobs (cache caps, count floor, incremental
-            // sync) and the irreversible data-reset actions (reset
-            // index, clear journal, clear servers/exclusions) live
-            // behind one row. Credential lifecycle (disconnect) lives
-            // in Connection, not here.
             SettingsCategoryRow(
                 icon: "wrench.and.screwdriver",
                 iconTint: t.textMuted,
-                title: "Advanced",
+                title: "Advanced".loc,
                 summary: nil
             ) { advancedPage }
 
@@ -810,7 +823,7 @@ public struct SettingsScreen: View {
             SettingsCategoryRow(
                 icon: "info.circle",
                 iconTint: t.info,
-                title: "About",
+                title: "About".loc,
                 summary: AboutInfo.versionLabel
             ) { aboutPage }
         }
@@ -824,44 +837,41 @@ public struct SettingsScreen: View {
     /// without drilling in.
     private var connectionSummary: String? {
         switch connectionStatus {
-        case .healthy: return "Connected"
-        case .offline: return "Offline"
-        case .authStale: return "Auth stale"
+        case .healthy: return "Connected".loc
+        case .offline: return "Offline".loc
+        case .authStale: return "Auth stale".loc
         }
     }
 
-    /// Library summary — prefer a Photos-auth health flag when
-    /// non-full (denied / limited blocks everything else), else fall
-    /// back to the scope description. Photos access lives on the
-    /// Library page now, so a degraded permission state surfacing
-    /// on the parent row is honest.
     private var librarySummary: String? {
         switch photoAuthStatus {
-        case .denied: return "Photos: denied"
-        case .limited: return "Photos: limited"
+        case .denied: return "Photos: denied".loc
+        case .limited: return "Photos: limited".loc
         case .full, .none:
             switch settings.indexingScope {
-            case .fullLibrary: return "All photos"
+            case .fullLibrary: return "All photos".loc
             case .selectedAlbums(let ids):
-                if ids.isEmpty { return "No albums selected" }
+                if ids.isEmpty { return "No albums selected".loc }
+                if CairnL10n.isChinese { return "\(ids.count) 个相册" }
                 return "\(ids.count) album\(ids.count == 1 ? "" : "s")"
             }
         }
     }
 
-    /// Safety & limits summary — strictness + quarantine in shorthand
-    /// (e.g. "Trusting · 14d"). These are the two highest-signal
-    /// rails values; surfacing them inline lets the user verify the
-    /// current calibration without entering the sub-page.
     private var safetyLimitsSummary: String? {
         let strictness: String
         switch settings.deletionStrictness {
-        case .strict: strictness = "Cautious"
-        case .trusting: strictness = "Balanced"
-        case .autonomous: strictness = "Autonomous"
+        case .strict: strictness = "Cautious".loc
+        case .trusting: strictness = "Balanced".loc
+        case .autonomous: strictness = "Autonomous".loc
         }
         let days = settings.quarantineDays
-        let quarantine = days == 0 ? "no quarantine" : "\(days)d"
+        let quarantine: String
+        if days == 0 {
+            quarantine = CairnL10n.isChinese ? "无隔离期" : "no quarantine"
+        } else {
+            quarantine = CairnL10n.isChinese ? "\(days) 天" : "\(days)d"
+        }
         return "\(strictness) · \(quarantine)"
     }
 
@@ -902,7 +912,7 @@ public struct SettingsScreen: View {
             }
         }
         .background(t.bg)
-        .navigationTitle("Connection")
+        .navigationTitle("Connection".loc)
         .cairnNavigationTitleDisplayMode(.inline)
         // Re-ping on appear so the latency reading is always fresh
         // when the user looks. Without this the value is from app
@@ -926,7 +936,7 @@ public struct SettingsScreen: View {
             }
         }
         .background(t.bg)
-        .navigationTitle("Library")
+        .navigationTitle("Library".loc)
         .cairnNavigationTitleDisplayMode(.inline)
     }
 
@@ -956,7 +966,7 @@ public struct SettingsScreen: View {
             }
         }
         .background(t.bg)
-        .navigationTitle("Safety & limits")
+        .navigationTitle("Safety & limits".loc)
         .cairnNavigationTitleDisplayMode(.inline)
     }
 
@@ -983,11 +993,10 @@ public struct SettingsScreen: View {
                         .padding(.bottom, -4)
 
                         SliderInputRow(
-                            label: "Percent threshold",
-                            sub: String(
-                                format: "Abort if a run would move more than %.1f%% of matched assets to Immich's Trash.",
-                                settings.maxDeletePercent
-                            ),
+                            label: "Percent threshold".loc,
+                            sub: CairnL10n.isChinese
+                                ? String(format: "如果单次运行将超过 %.1f%% 的匹配照片移入 Immich 废纸篓，则中止运行。", settings.maxDeletePercent)
+                                : String(format: "Abort if a run would move more than %.1f%% of matched assets to Immich's Trash.", settings.maxDeletePercent),
                             value: $settings.maxDeletePercent,
                             range: 0.5...5,
                             step: 0.1,
@@ -1021,8 +1030,37 @@ public struct SettingsScreen: View {
             }
         }
         .background(t.bg)
-        .navigationTitle("Appearance")
+        .navigationTitle("Appearance".loc)
         .cairnNavigationTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder
+    private var languagePage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                languageSection
+            }
+        }
+        .background(t.bg)
+        .navigationTitle("Language".loc)
+        .cairnNavigationTitleDisplayMode(.inline)
+    }
+
+    private var languageSection: some View {
+        Group {
+            KeylineSection("Language", icon: "globe", iconTint: t.info)
+            CairnCard {
+                LanguageRow(language: $settings.appLanguage)
+            }
+        }
+    }
+
+    private var languageSummary: String {
+        switch settings.appLanguage {
+        case .system: return "Auto".loc
+        case .english: return "English"
+        case .chineseSimplified: return "简体中文"
+        }
     }
 
     /// Combines old Data (export / import) + Recovery (find missed
@@ -1040,7 +1078,7 @@ public struct SettingsScreen: View {
             }
         }
         .background(t.bg)
-        .navigationTitle("Data & recovery")
+        .navigationTitle("Data & recovery".loc)
         .cairnNavigationTitleDisplayMode(.inline)
     }
 
@@ -1093,7 +1131,7 @@ public struct SettingsScreen: View {
             }
         }
         .background(t.bg)
-        .navigationTitle("Advanced")
+        .navigationTitle("Advanced".loc)
         .cairnNavigationTitleDisplayMode(.inline)
     }
 
@@ -1106,7 +1144,7 @@ public struct SettingsScreen: View {
             }
         }
         .background(t.bg)
-        .navigationTitle("About")
+        .navigationTitle("About".loc)
         .cairnNavigationTitleDisplayMode(.inline)
     }
 
@@ -1162,7 +1200,7 @@ public struct SettingsScreen: View {
                         if let serverVersionAdvisory {
                             // Soft advisory only — a newer Immich major than
                             // cairn was verified against. Not a blocker.
-                            Text(serverVersionAdvisory)
+                            Text(localizedServerVersionAdvisory(serverVersionAdvisory))
                                 .font(.cairnScaled(size: 12))
                                 .foregroundStyle(t.pendingInk)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -1180,23 +1218,23 @@ public struct SettingsScreen: View {
                     // buys you over the API key alone).
                     if hasSessionToken {
                         sessionRow(
-                            label: "Signed in to Immich",
-                            value: { Text("Sign out").foregroundStyle(t.dangerInk) },
+                            label: "Signed in to Immich".loc,
+                            value: { Text("Sign out".loc).foregroundStyle(t.dangerInk) },
                             chevron: false,
                             onTap: onSignOutSession
                         )
                     } else {
                         sessionRow(
-                            label: "Sign in to Immich",
-                            value: { Text("Enables incremental sync").foregroundStyle(t.textMuted) },
+                            label: "Sign in to Immich".loc,
+                            value: { Text("Enables incremental sync".loc).foregroundStyle(t.textMuted) },
                             chevron: true,
                             onTap: onOpenSessionSignIn
                         )
                     }
                     RowDivider()
                     ToggleRow(
-                        "Include credentials in backups",
-                        sub: "Lets your server address and API key restore onto a new phone along with an encrypted backup, instead of having to set cairn up again. Off by default, which seals them to this device — that's why an upgrade normally lands you back on the setup screen. This is backup only; it doesn't sync them to your other devices.",
+                        "Include credentials in backups".loc,
+                        sub: "Lets your server address and API key restore onto a new phone along with an encrypted backup, instead of having to set cairn up again. Off by default, which seals them to this device — that's why an upgrade normally lands you back on the setup screen. This is backup only; it doesn't sync them to your other devices.".loc,
                         value: Binding(
                             get: { credentialsTravelInBackups },
                             set: { onSetCredentialsTravelInBackups($0) }
@@ -1227,6 +1265,14 @@ public struct SettingsScreen: View {
     /// own button (its tap opens the popover); the rest of the row taps
     /// through to `onTap`. Factored out so the signed-in and
     /// signed-out variants share one layout + one help body.
+    private func localizedServerVersionAdvisory(_ advisory: String) -> String {
+        guard CairnL10n.isChinese else { return advisory }
+        if let serverVersion {
+            return "cairn 针对 Immich \(ImmichVersionSupport.lastVerified.majorMinor).x 进行了验证。你的服务器版本为 \(serverVersion) — 通常可以正常运行，但如果有异常，请留意 cairn 的更新。"
+        }
+        return advisory
+    }
+
     @ViewBuilder
     private func sessionRow<V: View>(
         label: String,
@@ -1257,11 +1303,19 @@ public struct SettingsScreen: View {
 
     @ViewBuilder
     private var sessionAuthHelp: some View {
-        Text("Your API key already covers everything ") + .cairnWord + Text(" needs to detect deletions and move photos to Immich's Trash. Signing in with your Immich email and password adds one extra capability.")
-        (Text("Immich only allows its incremental-sync stream over a logged-in session, not an API key. With it, ") + .cairnWord + Text(" fetches just what changed on the server since the last sync instead of re-listing every asset — noticeably faster on large libraries."))
-            .padding(.top, 4)
-        (Text("The session token is stored in your iPhone's Keychain and used only for that streaming path. Sign out anytime — your API key stays connected."))
-            .padding(.top, 4)
+        if CairnL10n.isChinese {
+            Text("你的 API 密钥已涵盖 ") + .cairnWord + Text(" 检测删除并将照片移入 Immich 废纸篓所需的全部功能。使用 Immich 邮箱和密码登录可额外解锁一项功能。")
+            (Text("Immich 仅在已登录的会话（而非 API 密钥）上允许增量同步流。借助该功能，") + .cairnWord + Text(" 仅获取上次同步后服务器上的更改，而无需重新列出所有照片 — 在大型照片库上速度显著提升。"))
+                .padding(.top, 4)
+            (Text("会话令牌存储在 iPhone 的钥匙串中，且仅用于该流式传输。可随时退出登录 — 你的 API 密钥将保持连接。"))
+                .padding(.top, 4)
+        } else {
+            Text("Your API key already covers everything ") + .cairnWord + Text(" needs to detect deletions and move photos to Immich's Trash. Signing in with your Immich email and password adds one extra capability.")
+            (Text("Immich only allows its incremental-sync stream over a logged-in session, not an API key. With it, ") + .cairnWord + Text(" fetches just what changed on the server since the last sync instead of re-listing every asset — noticeably faster on large libraries."))
+                .padding(.top, 4)
+            (Text("The session token is stored in your iPhone's Keychain and used only for that streaming path. Sign out anytime — your API key stays connected."))
+                .padding(.top, 4)
+        }
     }
 
     // MARK: - Excluded-value sub-view
@@ -1269,7 +1323,7 @@ public struct SettingsScreen: View {
     @ViewBuilder
     private var excludedValue: some View {
         HStack(spacing: 6) {
-            Text(excludedCount > 0 ? "\(excludedCount) protected" : "None")
+            Text(excludedCount > 0 ? (CairnL10n.isChinese ? "\(excludedCount) 项受保护" : "\(excludedCount) protected") : "None".loc)
                 .font(.cairnScaled(size: 15))
                 .foregroundStyle(excludedCount > 0 ? t.infoInk : t.textMuted)
             Image(systemName: "chevron.right")
@@ -1282,14 +1336,14 @@ public struct SettingsScreen: View {
 
     private var indexingScopeSection: some View {
         Group {
-            KeylineSection("Indexing scope", icon: "rectangle.dashed", iconTint: t.info)
+            KeylineSection("Indexing scope".loc, icon: "rectangle.dashed", iconTint: t.info)
             CairnCard {
                 VStack(spacing: 0) {
                     IndexingScopeRow(scope: $settings.indexingScope)
                     if settings.indexingScope.isRestricted {
                         RowDivider()
                         KeyValRow(
-                            "Selected albums",
+                            "Selected albums".loc,
                             value: { selectedAlbumsValue },
                             onTap: onOpenAlbumPicker
                         )
@@ -1304,8 +1358,8 @@ public struct SettingsScreen: View {
         let count = settings.indexingScope.albumLocalIdentifiers.count
         HStack(spacing: 6) {
             Text(count == 0
-                 ? "Pick at least one"
-                 : "\(count) album\(count == 1 ? "" : "s")")
+                 ? "Pick at least one".loc
+                 : (CairnL10n.isChinese ? "\(count) 个相册" : "\(count) album\(count == 1 ? "" : "s")"))
                 .font(.cairnScaled(size: 15))
                 .foregroundStyle(count > 0 ? t.infoInk : t.pendingInk)
             Image(systemName: "chevron.right")
@@ -1325,18 +1379,18 @@ public struct SettingsScreen: View {
     /// locally vs imputes from the server.
     private var initialScanSection: some View {
         Group {
-            KeylineSection("Initial scan", icon: "bolt", iconTint: t.info)
+            KeylineSection("Initial scan".loc, icon: "bolt", iconTint: t.info)
             CairnCard {
                 VStack(spacing: 0) {
                     ToggleRow(
-                        "Trust server checksums",
-                        sub: "For phone photos that match a server asset by filename and capture date, use the server's SHA1 instead of re-hashing locally. Ambiguous matches (multiple server photos with the same filename and date) fall through to local hashing. Off = always hash locally.",
+                        "Trust server checksums".loc,
+                        sub: "For phone photos that match a server asset by filename and capture date, use the server's SHA1 instead of re-hashing locally. Ambiguous matches (multiple server photos with the same filename and date) fall through to local hashing. Off = always hash locally.".loc,
                         value: $settings.fastInitialScan
                     )
                     RowDivider()
                     ToggleRow(
-                        "Keep screen on during sync",
-                        sub: "Prevents Auto-Lock while a sync is running so the foreground hashing pass doesn't stall when the device sleeps. On by default for the first sync; auto-disables after that. Re-enable for big follow-up runs (large onboarding, bulk delete) when you want to leave the phone unattended without it locking.",
+                        "Keep screen on during sync".loc,
+                        sub: "Prevents Auto-Lock while a sync is running so the foreground hashing pass doesn't stall when the device sleeps. On by default for the first sync; auto-disables after that. Re-enable for big follow-up runs (large onboarding, bulk delete) when you want to leave the phone unattended without it locking.".loc,
                         value: $settings.keepScreenAwakeDuringSync
                     )
                     if library.imputed > 0 {
@@ -1344,8 +1398,8 @@ public struct SettingsScreen: View {
                         cachedHashDiagnosticRow
                         RowDivider()
                         KeyValRow(
-                            "Re-hash imputed entries",
-                            value: { Text("Verify locally").foregroundStyle(t.infoInk) },
+                            "Re-hash imputed entries".loc,
+                            value: { Text("Verify locally".loc).foregroundStyle(t.infoInk) },
                             chevron: true,
                             onTap: { pendingVerifyImputed = true }
                         )
@@ -1364,15 +1418,15 @@ public struct SettingsScreen: View {
         let verified = max(0, library.indexed - library.imputed)
         let imputed = library.imputed
         KeyValRow(
-            "Cache breakdown",
+            "Cache breakdown".loc,
             value: {
                 HStack(spacing: 6) {
-                    Text("\(verified.formatted(.number)) verified")
+                    Text(CairnL10n.isChinese ? "\(verified.formatted(.number)) 已验证" : "\(verified.formatted(.number)) verified")
                         .font(.cairnScaled(size: 14))
                         .foregroundStyle(t.textBody)
                     Text("·")
                         .foregroundStyle(t.textHint)
-                    Text("\(imputed.formatted(.number)) trust-seeded")
+                    Text(CairnL10n.isChinese ? "\(imputed.formatted(.number)) 信任植入" : "\(imputed.formatted(.number)) trust-seeded")
                         .font(.cairnScaled(size: 14))
                         .foregroundStyle(t.infoInk)
                 }
@@ -1457,9 +1511,14 @@ public struct SettingsScreen: View {
             if photoAuthStatus == .limited {
                 Callout(.pending, icon: "exclamationmark.triangle") {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Limited Photos access").fontWeight(.semibold)
-                        (Text.cairnWord + Text(" can only see the photos you selected. Normal deletes still propagate, but any delete the system change-log misses (or any photo you deselect from the picked set) goes to ") + Text("Pending review").fontWeight(.semibold) + Text(" for manual confirmation instead of auto-trashing on Immich. Switch to Full Photos access for the strongest automatic safety."))
-                            .opacity(0.88).fixedSize(horizontal: false, vertical: true)
+                        Text("Limited Photos access".loc).fontWeight(.semibold)
+                        if CairnL10n.isChinese {
+                            (Text.cairnWord + Text(" 仅能访问您选择的照片。常规删除仍会同步，但系统变更日志遗漏的删除（或取消选中的照片）将进入 ") + Text("待审核").fontWeight(.semibold) + Text(" 供手动确认，而不会直接在 Immich 上删除。切换为“完全访问”可获得最佳的自动安全保护。"))
+                                .opacity(0.88).fixedSize(horizontal: false, vertical: true)
+                        } else {
+                            (Text.cairnWord + Text(" can only see the photos you selected. Normal deletes still propagate, but any delete the system change-log misses (or any photo you deselect from the picked set) goes to ") + Text("Pending review").fontWeight(.semibold) + Text(" for manual confirmation instead of auto-trashing on Immich. Switch to Full Photos access for the strongest automatic safety."))
+                                .opacity(0.88).fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -1476,11 +1535,11 @@ public struct SettingsScreen: View {
     /// in turn drive notification surfaces.
     private var backgroundRefreshSection: some View {
         Group {
-            KeylineSection("Background refresh", icon: "arrow.triangle.2.circlepath", iconTint: t.quiet)
+            KeylineSection("Background refresh".loc, icon: "arrow.triangle.2.circlepath", iconTint: t.quiet)
             CairnCard {
                 KeyValRow(
-                    "Background refresh",
-                    value: { Text("Allowed").foregroundStyle(t.verifiedInk) },
+                    "Background refresh".loc,
+                    value: { Text("Allowed".loc).foregroundStyle(t.verifiedInk) },
                     chevron: true,
                     onTap: openIOSSettings
                 )
@@ -1494,15 +1553,15 @@ public struct SettingsScreen: View {
     private var photoAccessValueLabel: some View {
         switch photoAuthStatus {
         case .full:
-            Text("Full library").foregroundStyle(t.verifiedInk)
+            Text("Full library".loc).foregroundStyle(t.verifiedInk)
         case .limited:
-            Text("Selected photos").foregroundStyle(t.pendingInk)
+            Text("Selected photos".loc).foregroundStyle(t.pendingInk)
         case .denied:
-            Text("Denied").foregroundStyle(t.dangerInk)
+            Text("Denied".loc).foregroundStyle(t.dangerInk)
         case .none:
             // No status yet (preview, mid-bootstrap). Match the
             // legacy hardcoded copy so nothing regresses visually.
-            Text("Full library").foregroundStyle(t.verifiedInk)
+            Text("Full library".loc).foregroundStyle(t.verifiedInk)
         }
     }
 
@@ -1544,7 +1603,7 @@ public struct SettingsScreen: View {
     /// how to inspect it server-side.
     private var howItWorksSection: some View {
         Group {
-            KeylineSection("How it works", icon: "info.circle", iconTint: t.quiet)
+            KeylineSection("How it works".loc, icon: "info.circle", iconTint: t.quiet)
             CairnCard {
                 VStack(spacing: 0) {
                     Button {
@@ -1554,8 +1613,8 @@ public struct SettingsScreen: View {
                     } label: {
                         HStack(spacing: 8) {
                             Text(howItWorksExpanded
-                                 ? "Hide server-side details"
-                                 : "What cairn does on your Immich server")
+                                 ? "Hide server-side details".loc
+                                 : "What cairn does on your Immich server".loc)
                                 .font(.cairnScaled(size: 15))
                                 .foregroundStyle(t.textBody)
                                 .multilineTextAlignment(.leading)
@@ -1570,7 +1629,7 @@ public struct SettingsScreen: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(howItWorksExpanded ? "Hide how it works" : "Show how it works")
+                    .accessibilityLabel(howItWorksExpanded ? "Hide how it works".loc : "Show how it works".loc)
 
                     if howItWorksExpanded {
                         RowDivider()
@@ -1641,7 +1700,7 @@ public struct SettingsScreen: View {
 
     private func howItWorksParagraph(title: String, body: Text) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title)
+            Text(title.loc)
                 .font(.cairnScaled(size: 12, weight: .semibold))
                 .tracking(0.4)
                 .foregroundStyle(t.textMuted)
@@ -1660,7 +1719,7 @@ public struct SettingsScreen: View {
     /// page the user already chose to enter is double-friction.
     private var advancedSection: some View {
         Group {
-            KeylineSection("Advanced", icon: "wrench.and.screwdriver", iconTint: t.textMuted)
+            KeylineSection("Advanced".loc, icon: "wrench.and.screwdriver", iconTint: t.textMuted)
             CairnCard {
                 VStack(spacing: 0) {
                     CountFloorRow(floor: $settings.minDeleteFloor)
@@ -1672,49 +1731,49 @@ public struct SettingsScreen: View {
                     ThumbhashCacheCapRow(mb: $settings.thumbhashCapMB)
                     RowDivider()
                     ToggleRow(
-                        "Incremental server sync",
-                        sub: "Stream only the changes since the last sync instead of refetching the whole server library each time. Much faster on large libraries. Falls back to the slower full-refetch path if you're not signed in to Immich (Connection settings) or your account doesn't allow the streaming endpoint.",
+                        "Incremental server sync".loc,
+                        sub: "Stream only the changes since the last sync instead of refetching the whole server library each time. Much faster on large libraries. Falls back to the slower full-refetch path if you're not signed in to Immich (Connection settings) or your account doesn't allow the streaming endpoint.".loc,
                         value: $settings.useIncrementalServerSync
                     )
                     RowDivider()
                     ToggleRow(
-                        "Diagnostic logging",
-                        sub: "Continuously capture logs across launches so a bug report has full history. Off by default to skip the background work; turn it on, reproduce the issue, then Export. Export still works while off (current session only).",
+                        "Diagnostic logging".loc,
+                        sub: "Continuously capture logs across launches so a bug report has full history. Off by default to skip the background work; turn it on, reproduce the issue, then Export. Export still works while off (current session only).".loc,
                         value: $settings.persistentDiagnosticLogging
                     )
                     RowDivider()
                     KeyValRow(
-                        "Export diagnostic logs",
-                        value: { Text("Save & share").foregroundStyle(t.infoInk) },
+                        "Export diagnostic logs".loc,
+                        value: { Text("Save & share".loc).foregroundStyle(t.infoInk) },
                         chevron: true,
                         onTap: onExportDiagnosticLogs
                     )
                     RowDivider()
                     KeyValRow(
-                        "Inspect asset by filename",
-                        value: { Text("Triage").foregroundStyle(t.infoInk) },
+                        "Inspect asset by filename".loc,
+                        value: { Text("Triage".loc).foregroundStyle(t.infoInk) },
                         chevron: true,
                         onTap: { showInspectAssetAlert = true }
                     )
                     RowDivider()
                     KeyValRow(
-                        "View archived history",
-                        value: { Text("Older runs").foregroundStyle(t.infoInk) },
+                        "View archived history".loc,
+                        value: { Text("Older runs".loc).foregroundStyle(t.infoInk) },
                         chevron: true,
                         onTap: { showArchivedHistory = true }
                     )
                     #if DEBUG
                     RowDivider()
                     KeyValRow(
-                        "Replay onboarding (dev)",
-                        value: { Text("Review setup").foregroundStyle(t.textMuted) },
+                        "Replay onboarding (dev)".loc,
+                        value: { Text("Review setup".loc).foregroundStyle(t.textMuted) },
                         chevron: true,
                         onTap: onReplayOnboarding
                     )
                     RowDivider()
                     KeyValRow(
-                        "Fire BG refresh now (dev)",
-                        value: { Text("Run scheduled scan").foregroundStyle(t.infoInk) },
+                        "Fire BG refresh now (dev)".loc,
+                        value: { Text("Run scheduled scan".loc).foregroundStyle(t.infoInk) },
                         chevron: true,
                         onTap: onFireBackgroundRefresh
                     )
@@ -1728,16 +1787,16 @@ public struct SettingsScreen: View {
 
     private var dataSection: some View {
         Group {
-            KeylineSection("Data", icon: "arrow.up.arrow.down", iconTint: t.verifiedInk)
+            KeylineSection("Data".loc, icon: "arrow.up.arrow.down", iconTint: t.verifiedInk)
             CairnCard {
                 VStack(spacing: 0) {
                     KeyValRow(
-                        "Export data",
+                        "Export data".loc,
                         value: {
                             if isTransferringData {
                                 ProgressView()
                             } else {
-                                Text("Share backup").foregroundStyle(t.infoInk)
+                                Text("Share backup".loc).foregroundStyle(t.infoInk)
                             }
                         },
                         chevron: !isTransferringData,
@@ -1745,12 +1804,12 @@ public struct SettingsScreen: View {
                     )
                     RowDivider()
                     KeyValRow(
-                        "Import data",
+                        "Import data".loc,
                         value: {
                             if isTransferringData {
                                 ProgressView()
                             } else {
-                                Text("Restore from file").foregroundStyle(t.infoInk)
+                                Text("Restore from file".loc).foregroundStyle(t.infoInk)
                             }
                         },
                         chevron: !isTransferringData,
@@ -1769,12 +1828,12 @@ public struct SettingsScreen: View {
     /// matched, so the user reviews each candidate before acting.
     private var recoverySection: some View {
         Group {
-            KeylineSection("Recovery", icon: "wand.and.stars", iconTint: t.pendingInk)
+            KeylineSection("Recovery".loc, icon: "wand.and.stars", iconTint: t.pendingInk)
             CairnCard {
                 VStack(spacing: 0) {
                     KeyValRow(
-                        "Find missed deletions",
-                        value: { Text("Scan server").foregroundStyle(t.infoInk) },
+                        "Find missed deletions".loc,
+                        value: { Text("Scan server".loc).foregroundStyle(t.infoInk) },
                         chevron: true,
                         onTap: onOpenMissedDeletions
                     )
@@ -1788,34 +1847,34 @@ public struct SettingsScreen: View {
 
     private var dangerZoneSection: some View {
         Group {
-            KeylineSection("Danger zone", icon: "exclamationmark.triangle", iconTint: t.danger)
+            KeylineSection("Danger zone".loc, icon: "exclamationmark.triangle", iconTint: t.danger)
             CairnCard {
                 VStack(spacing: 0) {
                     KeyValRow(
-                        "Reset index",
-                        value: { Text("Re-seed").foregroundStyle(t.dangerInk) },
+                        "Reset index".loc,
+                        value: { Text("Re-seed".loc).foregroundStyle(t.dangerInk) },
                         chevron: true,
                         onTap: { pendingResetIndex = true }
                     )
                     RowDivider()
                     KeyValRow(
-                        "Clear journal",
-                        value: { Text("Delete JSONL").foregroundStyle(t.dangerInk) },
+                        "Clear journal".loc,
+                        value: { Text("Delete JSONL".loc).foregroundStyle(t.dangerInk) },
                         chevron: true,
                         onTap: { pendingClearJournal = true }
                     )
                     RowDivider()
                     KeyValRow(
-                        "Clear saved servers & logins",
-                        value: { Text("Wipe autocomplete").foregroundStyle(t.dangerInk) },
+                        "Clear saved servers & logins".loc,
+                        value: { Text("Wipe autocomplete".loc).foregroundStyle(t.dangerInk) },
                         chevron: true,
                         onTap: { pendingClearRecentServers = true }
                     )
                     if excludedCount > 0 {
                         RowDivider()
                         KeyValRow(
-                            "Clear excluded assets",
-                            value: { Text("Wipe \(excludedCount)").foregroundStyle(t.dangerInk) },
+                            "Clear excluded assets".loc,
+                            value: { Text(CairnL10n.isChinese ? "清空 \(excludedCount) 项" : "Wipe \(excludedCount)").foregroundStyle(t.dangerInk) },
                             chevron: true,
                             onTap: { pendingClearExclusions = true }
                         )
@@ -1834,10 +1893,10 @@ public struct SettingsScreen: View {
 
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            KeylineSection("About", icon: "info.circle", iconTint: t.info)
+            KeylineSection("About".loc, icon: "info.circle", iconTint: t.info)
             CairnCard {
                 KeyValRow(
-                    "About cairn",
+                    "About cairn".loc,
                     value: AboutInfo.versionLabel,
                     chevron: true,
                     onTap: { showAbout = true }
@@ -1850,8 +1909,13 @@ public struct SettingsScreen: View {
 
     private var footer: some View {
         VStack(spacing: 2) {
-            Text.cairnWord + Text(" \(AboutInfo.versionLabel) · not affiliated with Immich")
-            Text("MIT · open source · privacy")
+            if CairnL10n.isChinese {
+                Text.cairnWord + Text(" \(AboutInfo.versionLabel) · 与 Immich 无关联")
+                Text("MIT 许可 · 开源 · 保护隐私")
+            } else {
+                Text.cairnWord + Text(" \(AboutInfo.versionLabel) · not affiliated with Immich")
+                Text("MIT · open source · privacy")
+            }
         }
         .font(.cairnScaled(size: 11))
         .foregroundStyle(t.textHint)
@@ -1929,7 +1993,7 @@ private struct SettingsCategoryRow<Destination: View>: View {
                         .font(.cairnScaled(size: 14, weight: .semibold))
                         .foregroundStyle(iconTint)
                 }
-                Text(title)
+                Text(title.loc)
                     .font(.cairnScaled(size: 15))
                     .foregroundStyle(t.textBody)
                 Spacer(minLength: 8)
@@ -1999,19 +2063,19 @@ struct AboutSheet: View {
 
                     CairnCard {
                         VStack(alignment: .leading, spacing: 0) {
-                            KeyValRow("App version", value: AboutInfo.version, mono: true)
+                            KeyValRow("App version".loc, value: AboutInfo.version, mono: true)
                             Divider().background(t.divider)
-                            KeyValRow("Build", value: AboutInfo.build, mono: true)
+                            KeyValRow("Build".loc, value: AboutInfo.build, mono: true)
                         }
                     }
                     .padding(.horizontal, 16)
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("cairn propagates iPhone Photos deletions to a self-hosted Immich server. Not affiliated with Immich.")
+                        Text("cairn propagates iPhone Photos deletions to a self-hosted Immich server. Not affiliated with Immich.".loc)
                             .font(.cairnScaled(size: 13))
                             .foregroundStyle(t.textBody)
                             .fixedSize(horizontal: false, vertical: true)
-                        Text("MIT-licensed · open source.")
+                        Text("MIT-licensed · open source.".loc)
                             .font(.cairnScaled(size: 12))
                             .foregroundStyle(t.textHint)
                     }
@@ -2021,13 +2085,13 @@ struct AboutSheet: View {
                 }
             }
             .background(t.bg)
-            .navigationTitle("About")
+            .navigationTitle("About".loc)
             #if canImport(UIKit)
             .cairnNavigationTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", action: onClose)
+                    Button("Done".loc, action: onClose)
                 }
             }
         }
@@ -2065,11 +2129,15 @@ private struct ConnectionPill: View {
     private func label(now: Date) -> String {
         switch status {
         case .healthy(let ms, let checkedAt):
-            return "healthy · \(ms)ms · \(Self.relativeAge(for: checkedAt, now: now))"
+            let rel = Self.relativeAge(for: checkedAt, now: now)
+            if CairnL10n.isChinese {
+                return "正常 · \(ms)ms · \(rel)"
+            }
+            return "healthy · \(ms)ms · \(rel)"
         case .offline:
-            return "offline"
+            return "offline".loc
         case .authStale:
-            return "auth expired"
+            return "auth expired".loc
         }
     }
     private var inkColor: Color {
@@ -2086,11 +2154,18 @@ private struct ConnectionPill: View {
     /// chattier than this surface wants.
     static func relativeAge(for date: Date, now: Date) -> String {
         let delta = max(0, now.timeIntervalSince(date))
-        if delta < 5 { return "just now" }
-        if delta < 60 { return "\(Int(delta))s ago" }
-        if delta < 3600 { return "\(Int(delta / 60))m ago" }
-        if delta < 86_400 { return "\(Int(delta / 3600))h ago" }
-        return "\(Int(delta / 86_400))d ago"
+        if delta < 5 { return "just now".loc }
+        if CairnL10n.isChinese {
+            if delta < 60 { return "\(Int(delta)) 秒前" }
+            if delta < 3600 { return "\(Int(delta / 60)) 分钟前" }
+            if delta < 86_400 { return "\(Int(delta / 3600)) 小时前" }
+            return "\(Int(delta / 86_400)) 天前"
+        } else {
+            if delta < 60 { return "\(Int(delta))s ago" }
+            if delta < 3600 { return "\(Int(delta / 60))m ago" }
+            if delta < 86_400 { return "\(Int(delta / 3600))h ago" }
+            return "\(Int(delta / 86_400))d ago"
+        }
     }
 }
 
@@ -2140,21 +2215,27 @@ private struct IndexingScopeRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Indexing scope")
+                Text("Indexing scope".loc)
                     .font(.cairnScaled(size: 15))
                     .foregroundStyle(t.textBody)
                 HelpPopover {
-                    Text("**Full library** — cairn watches every visible photo on this iPhone. The default.")
-                    Text("**Selected albums** — cairn only watches photos in albums you pick. Photos outside those albums are silently ignored: never hashed, never proposed for trash, never sent to your server. Add a photo to a selected album later and cairn picks it up on the next sync.")
-                    Text("Useful if you want to manage just one album (Camera Roll, say) and leave synced family albums alone — or if you're recording a demo and don't want your full library on screen.")
+                    if CairnL10n.isChinese {
+                        Text("**全部照片库** — cairn 监测本 iPhone 上的每一张可见照片。默认选项。")
+                        Text("**选定相册** — cairn 仅监测你选择的相册中的照片。不在这些相册中的照片会被完全忽略：绝不计算哈希、绝不提议删除、绝不发送到你的服务器。之后将照片加入选定相册，cairn 会在下次同步时自动纳入。")
+                        Text("如果你只想管理单个相册（例如相机胶卷），而不触动同步的家庭相册，或者在录制演示时不想让整个照片库出现在屏幕上，这个功能会很有用。")
+                    } else {
+                        Text("**Full library** — cairn watches every visible photo on this iPhone. The default.")
+                        Text("**Selected albums** — cairn only watches photos in albums you pick. Photos outside those albums are silently ignored: never hashed, never proposed for trash, never sent to your server. Add a photo to a selected album later and cairn picks it up on the next sync.")
+                        Text("Useful if you want to manage just one album (Camera Roll, say) and leave synced family albums alone — or if you're recording a demo and don't want your full library on screen.")
+                    }
                 }
                 Spacer()
             }
             CairnSegmentedPicker(
                 selection: kindBinding,
                 options: [
-                    .init(value: Kind.fullLibrary,    label: "Full library"),
-                    .init(value: Kind.selectedAlbums, label: "Selected albums"),
+                    .init(value: Kind.fullLibrary,    label: "Full library".loc),
+                    .init(value: Kind.selectedAlbums, label: "Selected albums".loc),
                 ]
             )
             Text(explanation)
@@ -2169,12 +2250,12 @@ private struct IndexingScopeRow: View {
     private var explanation: String {
         switch scope {
         case .fullLibrary:
-            return "Every visible photo on this iPhone is in scope."
+            return "Every visible photo on this iPhone is in scope.".loc
         case .selectedAlbums(let ids):
             if ids.isEmpty {
-                return "Pick the albums cairn should watch. Until you pick at least one, no photos are in scope."
+                return "Pick the albums cairn should watch. Until you pick at least one, no photos are in scope.".loc
             }
-            return "cairn watches only the picked albums. Photos elsewhere are ignored."
+            return "cairn watches only the picked albums. Photos elsewhere are ignored.".loc
         }
     }
 }
@@ -2186,22 +2267,28 @@ private struct StrictnessRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Deletion strictness")
+                Text("Deletion strictness".loc)
                     .font(.cairnScaled(size: 15))
                     .foregroundStyle(t.textBody)
                 HelpPopover {
-                    Text("**Cautious** — nothing is trashed automatically. Confirmed deletions surface as Ready to trash, and anything unconfirmed goes to Pending Review, for you to confirm by hand.")
-                    Text("**Balanced** — past-quarantine deletions are trashed automatically on the next sync, as long as the run stays within your safety limits. Held deletions still wait out the window; anything over the limit is left for you to review.")
-                    Text("**Autonomous** — deletions are trashed automatically on the next sync with no quarantine wait (still within your safety limits). Rely on Immich's 30-day Trash for recovery.")
+                    if CairnL10n.isChinese {
+                        Text("**谨慎模式** — 绝不自动删除任何照片。确认的删除会显示为“可移入废纸篓”，任何未确认的照片会进入“待审核”，需由你手动确认。")
+                        Text("**平衡模式** — 度过隔离期的删除会在下次同步时自动移入废纸篓（只要在你的安全限制范围内）。受保护的照片仍会等待隔离期结束；超过限制的项会留给你审核。")
+                        Text("**自主模式** — 删除在下次同步时立即移入废纸篓，无需等待隔离期（仍在安全限制范围内）。依靠 Immich 的 30 天废纸篓进行恢复。")
+                    } else {
+                        Text("**Cautious** — nothing is trashed automatically. Confirmed deletions surface as Ready to trash, and anything unconfirmed goes to Pending Review, for you to confirm by hand.")
+                        Text("**Balanced** — past-quarantine deletions are trashed automatically on the next sync, as long as the run stays within your safety limits. Held deletions still wait out the window; anything over the limit is left for you to review.")
+                        Text("**Autonomous** — deletions are trashed automatically on the next sync with no quarantine wait (still within your safety limits). Rely on Immich's 30-day Trash for recovery.")
+                    }
                 }
                 Spacer()
             }
             CairnSegmentedPicker(
                 selection: $strictness,
                 options: [
-                    .init(value: DeletionStrictness.strict,     label: "Cautious"),
-                    .init(value: DeletionStrictness.trusting,   label: "Balanced"),
-                    .init(value: DeletionStrictness.autonomous, label: "Autonomous"),
+                    .init(value: DeletionStrictness.strict,     label: "Cautious".loc),
+                    .init(value: DeletionStrictness.trusting,   label: "Balanced".loc),
+                    .init(value: DeletionStrictness.autonomous, label: "Autonomous".loc),
                 ]
             )
             Text(explanation)
@@ -2216,11 +2303,11 @@ private struct StrictnessRow: View {
     private var explanation: String {
         switch strictness {
         case .strict:
-            return "Nothing is trashed automatically — deletions wait as Ready to trash for you to confirm, and unconfirmed items go to Pending Review."
+            return "Nothing is trashed automatically — deletions wait as Ready to trash for you to confirm, and unconfirmed items go to Pending Review.".loc
         case .trusting:
-            return "Past-quarantine deletions move to Immich's Trash automatically on sync, within your safety limits. Held deletions still wait out the quarantine window."
+            return "Past-quarantine deletions move to Immich's Trash automatically on sync, within your safety limits. Held deletions still wait out the quarantine window.".loc
         case .autonomous:
-            return "Deletions move to Immich's Trash automatically on sync — no quarantine, no confirmation (within your safety limits). Immich keeps items in Trash for 30 days."
+            return "Deletions move to Immich's Trash automatically on sync — no quarantine, no confirmation (within your safety limits). Immich keeps items in Trash for 30 days.".loc
         }
     }
 }
@@ -2261,13 +2348,13 @@ private struct QuarantineRow: View {
             .padding(.bottom, -4)
 
             SliderInputRow(
-                label: "Quarantine window",
-                sub: "Confirmed deletions wait this long before they're eligible to trash. Catches accidental mass-offloads.",
+                label: "Quarantine window".loc,
+                sub: "Confirmed deletions wait this long before they're eligible to trash. Catches accidental mass-offloads.".loc,
                 value: doubleBinding,
                 range: Double(CairnSettings.quarantineDaysRange.lowerBound)...Double(CairnSettings.quarantineDaysRange.upperBound),
                 step: 1,
-                unitSuffix: days == 1 ? " day" : " days",
-                format: { $0 == 0 ? "Off" : String(format: "%.0f", $0) },
+                unitSuffix: CairnL10n.isChinese ? " 天" : (days == 1 ? " day" : " days"),
+                format: { $0 == 0 ? "Off".loc : String(format: "%.0f", $0) },
                 parse: NumericInputParse.integer
             )
         }
@@ -2307,12 +2394,12 @@ private struct MaxRetryAttemptsRow: View {
             .padding(.bottom, -4)
 
             SliderInputRow(
-                label: "Max retry attempts",
-                sub: "Stop auto-retrying a failed trash after this many tries. Manual retry still works.",
+                label: "Max retry attempts".loc,
+                sub: "Stop auto-retrying a failed trash after this many tries. Manual retry still works.".loc,
                 value: doubleBinding,
                 range: Double(CairnSettings.maxRetryAttemptsRange.lowerBound)...Double(CairnSettings.maxRetryAttemptsRange.upperBound),
                 step: 1,
-                unitSuffix: attempts == 1 ? " attempt" : " attempts",
+                unitSuffix: CairnL10n.isChinese ? " 次" : (attempts == 1 ? " attempt" : " attempts"),
                 format: { String(format: "%.0f", $0) },
                 parse: NumericInputParse.integer
             )
@@ -2366,12 +2453,12 @@ private struct CountFloorRow: View {
             .padding(.bottom, -4)
 
             SliderInputRow(
-                label: "Count floor",
-                sub: "Minimum run size before the percent threshold engages. Prevents noisy aborts on small libraries.",
+                label: "Count floor".loc,
+                sub: "Minimum run size before the percent threshold engages. Prevents noisy aborts on small libraries.".loc,
                 value: doubleBinding,
                 range: 1...50,
                 step: 1,
-                unitSuffix: floor == 1 ? " asset" : " assets",
+                unitSuffix: CairnL10n.isChinese ? " 项" : (floor == 1 ? " asset" : " assets"),
                 format: { String(format: "%.0f", $0) },
                 parse: NumericInputParse.integer
             )
@@ -2426,12 +2513,12 @@ private struct HashConcurrencyRow: View {
             .padding(.bottom, -4)
 
             SliderInputRow(
-                label: "Concurrent hashes",
-                sub: "How many photos the initial scan hashes at once. Higher = faster on capable devices; lower = gentler on memory.",
+                label: "Concurrent hashes".loc,
+                sub: "How many photos the initial scan hashes at once. Higher = faster on capable devices; lower = gentler on memory.".loc,
                 value: doubleBinding,
                 range: Double(CairnSettings.hashConcurrencyRange.lowerBound)...Double(CairnSettings.hashConcurrencyRange.upperBound),
                 step: 1,
-                unitSuffix: value == 1 ? " stream" : " streams",
+                unitSuffix: CairnL10n.isChinese ? " 路并发" : (value == 1 ? " stream" : " streams"),
                 format: { String(format: "%.0f", $0) },
                 parse: NumericInputParse.integer
             )
@@ -2453,8 +2540,8 @@ private struct ThumbnailCacheCapRow: View {
 
     var body: some View {
         SliderInputRow(
-            label: "Thumbnail cache cap",
-            sub: "Max disk space for cached server thumbnails. Oldest entries evict first.",
+            label: "Thumbnail cache cap".loc,
+            sub: "Max disk space for cached server thumbnails. Oldest entries evict first.".loc,
             value: doubleBinding,
             range: Double(CairnSettings.thumbnailCacheCapMBRange.lowerBound)...Double(CairnSettings.thumbnailCacheCapMBRange.upperBound),
             step: 10,
@@ -2479,8 +2566,8 @@ private struct ThumbhashCacheCapRow: View {
 
     var body: some View {
         SliderInputRow(
-            label: "Thumbhash cache cap",
-            sub: "Max disk space for thumbhash placeholders. Typically negligible.",
+            label: "Thumbhash cache cap".loc,
+            sub: "Max disk space for thumbhash placeholders. Typically negligible.".loc,
             value: doubleBinding,
             range: Double(CairnSettings.thumbhashCapMBRange.lowerBound)...Double(CairnSettings.thumbhashCapMBRange.upperBound),
             step: 1,
@@ -2536,8 +2623,8 @@ private struct ICloudDownloadLimitRow: View {
             .padding(.bottom, -4)
 
             SliderInputRow(
-                label: "iCloud download limit",
-                sub: "Foreground cap on per-asset iCloud downloads. Larger assets queue for background hashing instead of blocking the sync.",
+                label: "iCloud download limit".loc,
+                sub: "Foreground cap on per-asset iCloud downloads. Larger assets queue for background hashing instead of blocking the sync.".loc,
                 value: doubleBinding,
                 range: Double(CairnSettings.iCloudDownloadLimitMBRange.lowerBound)...Double(CairnSettings.iCloudDownloadLimitMBRange.upperBound),
                 step: 5,
@@ -2613,7 +2700,7 @@ private struct HardCeilingRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Never-touch ceiling")
+                Text("Never-touch ceiling".loc)
                     .font(.cairnScaled(size: 15))
                     .foregroundStyle(t.textBody)
                 HelpPopover {
@@ -2636,7 +2723,7 @@ private struct HardCeilingRow: View {
                     .tint(t.verified)
             }
             if mb != nil {
-                Text("Assets whose iCloud fetch would exceed this are out-of-scope — never indexed, never proposed for deletion.")
+                Text("Assets whose iCloud fetch would exceed this are out-of-scope — never indexed, never proposed for deletion.".loc)
                     .font(.cairnScaled(size: 12))
                     .foregroundStyle(t.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2658,7 +2745,7 @@ private struct HardCeilingRow: View {
                     )
                 }
             } else {
-                Text("Off. Every asset is eligible to hash, however large.")
+                Text("Off. Every asset is eligible to hash, however large.".loc)
                     .font(.cairnScaled(size: 12))
                     .foregroundStyle(t.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2728,7 +2815,7 @@ private struct PropagationMaxAgeRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Don't propagate old deletes")
+                Text("Don't propagate old deletes".loc)
                     .font(.cairnScaled(size: 15))
                     .foregroundStyle(t.textBody)
                 HelpPopover {
@@ -2743,7 +2830,7 @@ private struct PropagationMaxAgeRow: View {
                     .tint(t.verified)
             }
             if let days {
-                Text("Ignores phone-delete events for photos taken more than \(days.formatted(.number)) day\(days == 1 ? "" : "s") ago. Recent deletes still propagate normally.")
+                Text(CairnL10n.isChinese ? "忽略 \(days) 天前拍摄照片的本地删除事件。较新的删除仍会正常同步。" : "Ignores phone-delete events for photos taken more than \(days.formatted(.number)) day\(days == 1 ? "" : "s") ago. Recent deletes still propagate normally.")
                     .font(.cairnScaled(size: 12))
                     .foregroundStyle(t.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2759,13 +2846,13 @@ private struct PropagationMaxAgeRow: View {
                         value: doubleBinding,
                         range: Double(CairnSettings.propagationMaxAgeDaysRange.lowerBound)...Double(CairnSettings.propagationMaxAgeDaysRange.upperBound),
                         step: 30,
-                        unitSuffix: " days",
+                        unitSuffix: CairnL10n.isChinese ? " 天" : " days",
                         format: { String(format: "%.0f", $0) },
                         parse: NumericInputParse.integer
                     )
                 }
             } else {
-                Text("Off. Every phone deletion is in scope for propagation, regardless of when the photo was taken.")
+                Text("Off. Every phone deletion is in scope for propagation, regardless of when the photo was taken.".loc)
                     .font(.cairnScaled(size: 12))
                     .foregroundStyle(t.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2807,13 +2894,13 @@ private struct BacklogAlertRow: View {
             .padding(.bottom, -4)
 
             SliderInputRow(
-                label: "Backlog alert",
-                sub: "Show a Status banner when pending deletions reach this many items.",
+                label: "Backlog alert".loc,
+                sub: "Show a Status banner when pending deletions reach this many items.".loc,
                 value: doubleBinding,
                 range: Double(CairnSettings.deletionBacklogAlertThresholdRange.lowerBound)...Double(CairnSettings.deletionBacklogAlertThresholdRange.upperBound),
                 step: 5,
-                unitSuffix: threshold == 1 ? " item" : " items",
-                format: { $0 == 0 ? "Off" : String(format: "%.0f", $0) },
+                unitSuffix: CairnL10n.isChinese ? " 项" : (threshold == 1 ? " item" : " items"),
+                format: { $0 == 0 ? "Off".loc : String(format: "%.0f", $0) },
                 parse: NumericInputParse.integer
             )
         }
@@ -2832,18 +2919,18 @@ private struct AppearanceRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Color scheme")
+            Text("Color scheme".loc)
                 .font(.cairnScaled(size: 15))
                 .foregroundStyle(t.textBody)
             CairnSegmentedPicker(
                 selection: $appearance,
                 options: [
-                    .init(value: AppearanceOverride.system, label: "Auto"),
-                    .init(value: AppearanceOverride.light,  label: "Light"),
-                    .init(value: AppearanceOverride.dark,   label: "Dark"),
+                    .init(value: AppearanceOverride.system, label: "Auto".loc),
+                    .init(value: AppearanceOverride.light,  label: "Light".loc),
+                    .init(value: AppearanceOverride.dark,   label: "Dark".loc),
                 ]
             )
-            Text(explanation)
+            Text(explanation.loc)
                 .font(.cairnScaled(size: 12))
                 .foregroundStyle(t.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -2874,18 +2961,18 @@ private struct TimeFormatRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Time format")
+            Text("Time format".loc)
                 .font(.cairnScaled(size: 15))
                 .foregroundStyle(t.textBody)
             CairnSegmentedPicker(
                 selection: $format,
                 options: [
-                    .init(value: TimeDisplayFormat.system, label: "System"),
-                    .init(value: TimeDisplayFormat.h12,    label: "12-hour"),
-                    .init(value: TimeDisplayFormat.h24,    label: "24-hour"),
+                    .init(value: TimeDisplayFormat.system, label: "System".loc),
+                    .init(value: TimeDisplayFormat.h12,    label: "12-hour".loc),
+                    .init(value: TimeDisplayFormat.h24,    label: "24-hour".loc),
                 ]
             )
-            Text(explanation)
+            Text(explanation.loc)
                 .font(.cairnScaled(size: 12))
                 .foregroundStyle(t.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -2899,6 +2986,44 @@ private struct TimeFormatRow: View {
         case .system: return "Follows iOS Settings → General → Date & Time."
         case .h12:    return "Always 12-hour with AM/PM (e.g. 5:57 PM)."
         case .h24:    return "Always 24-hour (e.g. 17:57)."
+        }
+    }
+}
+
+// MARK: - Language row
+
+/// Segmented picker for app language override (system / English / Simplified Chinese).
+private struct LanguageRow: View {
+    @Binding var language: AppLanguage
+    @Environment(\.cairnTokens) private var t
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Language".loc)
+                .font(.cairnScaled(size: 15))
+                .foregroundStyle(t.textBody)
+            CairnSegmentedPicker(
+                selection: $language,
+                options: [
+                    .init(value: AppLanguage.system,            label: "Auto".loc),
+                    .init(value: AppLanguage.english,           label: "English"),
+                    .init(value: AppLanguage.chineseSimplified, label: "简体中文"),
+                ]
+            )
+            Text(explanation)
+                .font(.cairnScaled(size: 12))
+                .foregroundStyle(t.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
+    }
+
+    private var explanation: String {
+        switch language {
+        case .system: return "Follows system preferred language.".loc
+        case .english: return "Always display in English.".loc
+        case .chineseSimplified: return "Always display in Simplified Chinese.".loc
         }
     }
 }
@@ -2919,7 +3044,7 @@ private struct DeferredQueueRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Deferred hashing")
+                Text("Deferred hashing".loc)
                     .font(.cairnScaled(size: 15))
                     .foregroundStyle(t.textBody)
                 HelpPopover {
@@ -2946,11 +3071,11 @@ private struct DeferredQueueRow: View {
             if summary.count > 0 {
                 HStack(alignment: .center) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(summary.count) \(summary.count == 1 ? "asset" : "assets") queued")
+                        Text(CairnL10n.isChinese ? "\(summary.count) 项排队等待" : "\(summary.count) \(summary.count == 1 ? "asset" : "assets") queued")
                             .font(.cairnScaled(size: 14).monospacedDigit())
                             .foregroundStyle(t.textBody)
                         if summary.totalKnownBytes > 0 {
-                            Text("\(formatBytes(summary.totalKnownBytes)) to fetch")
+                            Text(CairnL10n.isChinese ? "待下载 \(formatBytes(summary.totalKnownBytes))" : "\(formatBytes(summary.totalKnownBytes)) to fetch")
                                 .font(.cairnScaled(size: 12))
                                 .foregroundStyle(t.textMuted)
                         }
@@ -2959,7 +3084,7 @@ private struct DeferredQueueRow: View {
                     hashNowButton
                 }
             } else {
-                Text("Everything indexed. No assets queued for background hashing.")
+                Text("Everything indexed. No assets queued for background hashing.".loc)
                     .font(.cairnScaled(size: 12))
                     .foregroundStyle(t.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2986,7 +3111,7 @@ private struct DeferredQueueRow: View {
                     Text(syncLabel)
                         .font(.cairnScaled(size: 13, weight: .semibold).monospacedDigit())
                 } else {
-                    Text("Hash now")
+                    Text("Hash now".loc)
                         .font(.cairnScaled(size: 13, weight: .semibold))
                 }
             }
@@ -3002,9 +3127,9 @@ private struct DeferredQueueRow: View {
 
     private var syncLabel: String {
         if let progress = syncProgress, progress.total > 0 {
-            return "Hashing \(progress.hashed) / \(progress.total)"
+            return CairnL10n.isChinese ? "正在哈希 \(progress.hashed) / \(progress.total)" : "Hashing \(progress.hashed) / \(progress.total)"
         }
-        return "Hashing…"
+        return "Hashing…".loc
     }
 
     private func formatBytes(_ bytes: Int64) -> String {
@@ -3044,12 +3169,12 @@ public struct ApiKeyRow: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("API key")
+                Text("API key".loc)
                     .font(.cairnScaled(size: 15))
                     .foregroundStyle(t.textBody)
                 Spacer()
                 Button(action: toggleReveal) {
-                    Text(revealed ? "Hide" : "Reveal")
+                    Text(revealed ? "Hide".loc : "Reveal".loc)
                         .font(.cairnScaled(size: 12, weight: .medium))
                         .foregroundStyle(revealed ? t.dangerInk : t.infoInk)
                         .padding(.horizontal, 8)

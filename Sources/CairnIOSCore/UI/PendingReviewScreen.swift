@@ -308,14 +308,18 @@ public struct PendingReviewScreen: View {
 
     private var header: some View {
         AppHeader(
-            title: selectionMode ? (selectedChecksums.isEmpty ? "Select items" : "\(selectedChecksums.count) selected") : "Pending review",
+            title: selectionMode
+                ? (selectedChecksums.isEmpty
+                    ? "Select items".loc
+                    : (CairnL10n.isChinese ? "已选择 \(selectedChecksums.count) 项" : "\(selectedChecksums.count) selected"))
+                : "Pending review".loc,
             subtitle: selectionMode ? nil : (isEmpty
-                ? "Nothing waiting — every candidate has been handled"
+                ? "Nothing waiting — every candidate has been handled".loc
                 : subtitleCopy),
             leading: {
                 if selectionMode {
                     Button(action: exitSelectionMode) {
-                        Text("Cancel")
+                        Text("Cancel".loc)
                             .font(.cairnScaled(size: 15))
                             .foregroundStyle(t.textBody)
                             .padding(.vertical, 4)
@@ -327,7 +331,7 @@ public struct PendingReviewScreen: View {
                         HStack(spacing: 4) {
                             Image(systemName: "chevron.left")
                                 .font(.cairnScaled(size: 13, weight: .semibold))
-                            Text("Status")
+                            Text("Status".loc)
                                 .font(.cairnScaled(size: 15))
                         }
                         .foregroundStyle(t.textBody)
@@ -341,7 +345,7 @@ public struct PendingReviewScreen: View {
                 if !isEmpty {
                     if selectionMode {
                         Button(action: toggleSelectAll) {
-                            Text(allSelected ? "None" : "All")
+                            Text(allSelected ? "None".loc : "All".loc)
                                 .font(.cairnScaled(size: 13, weight: .semibold))
                                 .tracking(0.66)
                                 .foregroundStyle(t.textBody)
@@ -349,7 +353,7 @@ public struct PendingReviewScreen: View {
                         .buttonStyle(.plain)
                     } else {
                         Button(action: enterSelectionMode) {
-                            Text("Select")
+                            Text("Select".loc)
                                 .font(.cairnScaled(size: 13, weight: .semibold))
                                 .tracking(0.66)
                                 .foregroundStyle(t.textBody)
@@ -535,12 +539,12 @@ public struct PendingReviewScreen: View {
             }
             .padding(.bottom, 14)
 
-            Text("Nothing to review")
+            Text("Nothing to review".loc)
                 .font(.cairnScaled(size: 17, weight: .semibold))
                 .foregroundStyle(t.text)
                 .padding(.bottom, 6)
 
-            Text("Recent deletions are either ready to move to Immich's Trash or still inside the quarantine window. Anything that needs your input will show up here.")
+            Text("Recent deletions are either ready to move to Immich's Trash or still inside the quarantine window. Anything that needs your input will show up here.".loc)
                 .font(.cairnScaled(size: 13))
                 .foregroundStyle(t.textMuted)
                 .multilineTextAlignment(.center)
@@ -895,21 +899,36 @@ public struct PendingReviewScreen: View {
 
     private var confirmationTitle: String {
         switch pendingAction {
-        case .approveGroup(let g): return "Move \(groupNoun(g)) to Trash now?"
-        case .excludeGroup(let g): return "Exclude \(groupNoun(g)) from future runs?"
-        case .dismissGroup(let g): return "Dismiss \(groupNoun(g))?"
-        case .approveVersion(_, let l): return "Move \(l) version to Trash now?"
-        case .excludeVersion(_, let l): return "Exclude \(l) version from future runs?"
-        case .dismissVersion(_, let l): return "Dismiss \(l) version?"
-        case .approveBatch(_, let n, _): return "Move all \(n) photos to Trash now?"
-        case .excludeBatch(_, let n, _): return "Exclude all \(n) photos from future runs?"
-        case .dismissBatch(_, let n, _): return "Dismiss all \(n) photos?"
-        case .bulkOffload(let n): return "Exclude all \(n) recent deletions?"
-        case .bulkApprove(let n): return "Move \(n) selected item\(n == 1 ? "" : "s") to Trash now?"
-        case .bulkExcludeSelected(let n): return "Exclude \(n) selected item\(n == 1 ? "" : "s")?"
-        case .bulkDismiss(let n): return "Dismiss \(n) selected item\(n == 1 ? "" : "s")?"
-        case .trashAll(let n): return "Move all \(n) item\(n == 1 ? "" : "s") to Trash now?"
-        case .none:              return ""
+        case .approveGroup(let g):
+            return CairnL10n.isChinese ? "立即将 \(groupNoun(g)) 移入废纸篓？" : "Move \(groupNoun(g)) to Trash now?"
+        case .excludeGroup(let g):
+            return CairnL10n.isChinese ? "在未来运行中排除 \(groupNoun(g))？" : "Exclude \(groupNoun(g)) from future runs?"
+        case .dismissGroup(let g):
+            return CairnL10n.isChinese ? "忽略 \(groupNoun(g))？" : "Dismiss \(groupNoun(g))?"
+        case .approveVersion(_, let l):
+            return CairnL10n.isChinese ? "立即将 \(l) 版本移入废纸篓？" : "Move \(l) version to Trash now?"
+        case .excludeVersion(_, let l):
+            return CairnL10n.isChinese ? "在未来运行中排除 \(l) 版本？" : "Exclude \(l) version from future runs?"
+        case .dismissVersion(_, let l):
+            return CairnL10n.isChinese ? "忽略 \(l) 版本？" : "Dismiss \(l) version?"
+        case .approveBatch(_, let n, _):
+            return CairnL10n.isChinese ? "立即将全部 \(n) 张照片移入废纸篓？" : "Move all \(n) photos to Trash now?"
+        case .excludeBatch(_, let n, _):
+            return CairnL10n.isChinese ? "在未来运行中排除全部 \(n) 张照片？" : "Exclude all \(n) photos from future runs?"
+        case .dismissBatch(_, let n, _):
+            return CairnL10n.isChinese ? "忽略全部 \(n) 张照片？" : "Dismiss all \(n) photos?"
+        case .bulkOffload(let n):
+            return CairnL10n.isChinese ? "排除近期删除的全部 \(n) 项？" : "Exclude all \(n) recent deletions?"
+        case .bulkApprove(let n):
+            return CairnL10n.isChinese ? "立即将所选 \(n) 项移入废纸篓？" : "Move \(n) selected item\(n == 1 ? "" : "s") to Trash now?"
+        case .bulkExcludeSelected(let n):
+            return CairnL10n.isChinese ? "排除所选 \(n) 项？" : "Exclude \(n) selected item\(n == 1 ? "" : "s")?"
+        case .bulkDismiss(let n):
+            return CairnL10n.isChinese ? "忽略所选 \(n) 项？" : "Dismiss \(n) selected item\(n == 1 ? "" : "s")?"
+        case .trashAll(let n):
+            return CairnL10n.isChinese ? "立即将全部 \(n) 项移入废纸篓？" : "Move all \(n) item\(n == 1 ? "" : "s") to Trash now?"
+        case .none:
+            return ""
         }
     }
 
@@ -920,9 +939,9 @@ public struct PendingReviewScreen: View {
         // already encode the name in the key.
         let name = group.versions.first?.originalFileName
             ?? group.key.fallbackFilename
-            ?? "this photo"
+            ?? (CairnL10n.isChinese ? "此照片" : "this photo")
         if group.versions.count > 1 {
-            return "\(name) (\(group.versions.count) versions)"
+            return CairnL10n.isChinese ? "\(name)（\(group.versions.count) 个版本）" : "\(name) (\(group.versions.count) versions)"
         }
         return name
     }
@@ -931,41 +950,57 @@ public struct PendingReviewScreen: View {
         switch pendingAction {
         case .approveGroup(let g):
             if g.versions.count > 1 {
-                return Text("Skips the quarantine wait for every version. Immich keeps them in Trash for 30 days.")
+                return Text("Skips the quarantine wait for every version. Immich keeps them in Trash for 30 days.".loc)
             }
-            return Text("Skips the quarantine wait. Immich keeps it in Trash for 30 days.")
+            return Text("Skips the quarantine wait. Immich keeps it in Trash for 30 days.".loc)
         case .excludeGroup(let g):
             if g.versions.count > 1 {
-                return Text("Future runs will skip every version. You can unexclude later from Settings.")
+                return Text("Future runs will skip every version. You can unexclude later from Settings.".loc)
             }
-            return Text("Future runs will skip this one. You can unexclude later from Settings.")
+            return Text("Future runs will skip this one. You can unexclude later from Settings.".loc)
         case .dismissGroup(let g):
             if g.versions.count > 1 {
-                return Text("Removes every version from the pending list. If you delete the same photo again, they will reappear.")
+                return Text("Removes every version from the pending list. If you delete the same photo again, they will reappear.".loc)
             }
-            return Text("Removes it from the pending list. If you delete the same photo again, it will reappear.")
+            return Text("Removes it from the pending list. If you delete the same photo again, it will reappear.".loc)
         case .approveVersion:
-            return Text("Skips the quarantine wait for this version only. Immich keeps it in Trash for 30 days.")
+            return Text("Skips the quarantine wait for this version only. Immich keeps it in Trash for 30 days.".loc)
         case .excludeVersion:
-            return Text("Future runs will skip this version. The other versions in this group are unaffected.")
+            return Text("Future runs will skip this version. The other versions in this group are unaffected.".loc)
         case .dismissVersion:
-            return Text("Removes this version from the pending list. Other versions in the group remain.")
+            return Text("Removes this version from the pending list. Other versions in the group remain.".loc)
         case .approveBatch(_, let n, _):
-            return Text("Skips the quarantine wait for all \(n) photos in this batch. Immich keeps them in Trash for 30 days.")
+            if CairnL10n.isChinese {
+                return Text("跳过该批次中全部 \(n) 张照片的隔离等待期。Immich 会在废纸篓中保留 30 天。")
+            } else {
+                return Text("Skips the quarantine wait for all \(n) photos in this batch. Immich keeps them in Trash for 30 days.")
+            }
         case .excludeBatch(_, let n, _):
-            return Text("Future runs will skip all \(n). You can unexclude later from Settings.")
+            if CairnL10n.isChinese {
+                return Text("未来运行将跳过全部 \(n) 张照片。你之后可在“设置”中取消排除。")
+            } else {
+                return Text("Future runs will skip all \(n). You can unexclude later from Settings.")
+            }
         case .dismissBatch(_, let n, _):
-            return Text("Removes all \(n) from the pending list. If you delete the same photos again, they will reappear.")
+            if CairnL10n.isChinese {
+                return Text("将全部 \(n) 张照片从待处理列表中移除。如果再次删除相同照片，它们将重新出现。")
+            } else {
+                return Text("Removes all \(n) from the pending list. If you delete the same photos again, they will reappear.")
+            }
         case .bulkOffload:
-            return Text("All \(massOffloadCount) recent deletions will move to the excluded list. ") + .cairnWord + Text(" will stop considering them.")
+            if CairnL10n.isChinese {
+                return Text("近期删除的全部 \(massOffloadCount) 项都将移入排除列表。") + .cairnWord + Text(" 将不再处理它们。")
+            } else {
+                return Text("All \(massOffloadCount) recent deletions will move to the excluded list. ") + .cairnWord + Text(" will stop considering them.")
+            }
         case .bulkApprove:
-            return Text("Skips the quarantine wait for every selected item. Immich keeps them in Trash for 30 days.")
+            return Text("Skips the quarantine wait for every selected item. Immich keeps them in Trash for 30 days.".loc)
         case .bulkExcludeSelected:
-            return Text("Future runs will skip every selected item. You can unexclude later from Settings.")
+            return Text("Future runs will skip every selected item. You can unexclude later from Settings.".loc)
         case .bulkDismiss:
-            return Text("Removes selected items from the pending list. If you delete them again, they will reappear.")
+            return Text("Removes selected items from the pending list. If you delete them again, they will reappear.".loc)
         case .trashAll:
-            return Text("Skips the quarantine wait for every item. Immich keeps them in Trash for 30 days.")
+            return Text("Skips the quarantine wait for every item. Immich keeps them in Trash for 30 days.".loc)
         case .none:
             return Text("")
         }
@@ -975,64 +1010,64 @@ public struct PendingReviewScreen: View {
     private var confirmationButtons: some View {
         switch pendingAction {
         case .approveGroup(let g):
-            Button("Move to Trash", role: .destructive) {
+            Button("Move to Trash".loc, role: .destructive) {
                 onApprove(g.versions.map(\.checksum.base64))
             }
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel".loc, role: .cancel) {}
         case .excludeGroup(let g):
-            Button("Exclude", role: .destructive) {
+            Button("Exclude".loc, role: .destructive) {
                 onExclude(g.versions.map(\.checksum.base64))
             }
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel".loc, role: .cancel) {}
         case .dismissGroup(let g):
-            Button("Dismiss") {
+            Button("Dismiss".loc) {
                 onDismiss(g.versions.map(\.checksum.base64))
             }
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel".loc, role: .cancel) {}
         case .approveVersion(let c, _):
-            Button("Move to Trash", role: .destructive) { onApprove([c]) }
-            Button("Cancel", role: .cancel) {}
+            Button("Move to Trash".loc, role: .destructive) { onApprove([c]) }
+            Button("Cancel".loc, role: .cancel) {}
         case .excludeVersion(let c, _):
-            Button("Exclude", role: .destructive) { onExclude([c]) }
-            Button("Cancel", role: .cancel) {}
+            Button("Exclude".loc, role: .destructive) { onExclude([c]) }
+            Button("Cancel".loc, role: .cancel) {}
         case .dismissVersion(let c, _):
-            Button("Dismiss") { onDismiss([c]) }
-            Button("Cancel", role: .cancel) {}
+            Button("Dismiss".loc) { onDismiss([c]) }
+            Button("Cancel".loc, role: .cancel) {}
         case .approveBatch(_, _, let checksums):
-            Button("Move to Trash", role: .destructive) { onApprove(checksums) }
-            Button("Cancel", role: .cancel) {}
+            Button("Move to Trash".loc, role: .destructive) { onApprove(checksums) }
+            Button("Cancel".loc, role: .cancel) {}
         case .excludeBatch(_, _, let checksums):
-            Button("Exclude", role: .destructive) { onExclude(checksums) }
-            Button("Cancel", role: .cancel) {}
+            Button("Exclude".loc, role: .destructive) { onExclude(checksums) }
+            Button("Cancel".loc, role: .cancel) {}
         case .dismissBatch(_, _, let checksums):
-            Button("Dismiss") { onDismiss(checksums) }
-            Button("Cancel", role: .cancel) {}
+            Button("Dismiss".loc) { onDismiss(checksums) }
+            Button("Cancel".loc, role: .cancel) {}
         case .bulkOffload:
-            Button("Exclude all", role: .destructive) { onBulkExcludeOffload() }
-            Button("Cancel", role: .cancel) {}
+            Button("Exclude all".loc, role: .destructive) { onBulkExcludeOffload() }
+            Button("Cancel".loc, role: .cancel) {}
         case .bulkApprove:
-            Button("Move selected to Trash", role: .destructive) {
+            Button("Move selected to Trash".loc, role: .destructive) {
                 onApprove(Array(selectedChecksums))
                 exitSelectionMode()
             }
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel".loc, role: .cancel) {}
         case .bulkExcludeSelected:
-            Button("Exclude selected", role: .destructive) {
+            Button("Exclude selected".loc, role: .destructive) {
                 onExclude(Array(selectedChecksums))
                 exitSelectionMode()
             }
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel".loc, role: .cancel) {}
         case .bulkDismiss:
-            Button("Dismiss selected") {
+            Button("Dismiss selected".loc) {
                 onDismiss(Array(selectedChecksums))
                 exitSelectionMode()
             }
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel".loc, role: .cancel) {}
         case .trashAll:
-            Button("Move all to Trash", role: .destructive) {
+            Button("Move all to Trash".loc, role: .destructive) {
                 onApprove(allChecksums)
             }
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel".loc, role: .cancel) {}
         case .none:
             EmptyView()
         }

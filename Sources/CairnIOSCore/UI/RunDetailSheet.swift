@@ -349,7 +349,7 @@ public struct RunDetailSheet: View {
         case .safetyRail(let reason):
             Callout(.danger, icon: "exclamationmark.triangle") {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Percent threshold exceeded").fontWeight(.semibold)
+                    Text("Percent threshold exceeded".loc).fontWeight(.semibold)
                     Text(safetyRailMessage(from: reason))
                         .opacity(0.9)
                         .fixedSize(horizontal: false, vertical: true)
@@ -360,8 +360,8 @@ public struct RunDetailSheet: View {
         case .emptyServer:
             Callout(.pending, icon: "exclamationmark.triangle") {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Server returned no assets").fontWeight(.semibold)
-                    Text("cairn refused to act on what looked like a transient API problem. Nothing was touched.")
+                    Text("Server returned no assets".loc).fontWeight(.semibold)
+                    Text("cairn refused to act on what looked like a transient API problem. Nothing was touched.".loc)
                         .opacity(0.9)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -371,8 +371,8 @@ public struct RunDetailSheet: View {
         case .emptyLocal:
             Callout(.pending, icon: "exclamationmark.triangle") {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Local library is empty").fontWeight(.semibold)
-                    Text("Photos permission may have been revoked, or the library scan hadn't completed. Nothing was touched.")
+                    Text("Local library is empty".loc).fontWeight(.semibold)
+                    Text("Photos permission may have been revoked, or the library scan hadn't completed. Nothing was touched.".loc)
                         .opacity(0.9)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -382,8 +382,8 @@ public struct RunDetailSheet: View {
         case .firstRunNotDryRun:
             Callout(.pending, icon: "exclamationmark.triangle") {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("First run must be a dry-run").fontWeight(.semibold)
-                    Text("cairn requires a preview before the first real trash on a fresh observed store.")
+                    Text("First run must be a dry-run".loc).fontWeight(.semibold)
+                    Text("cairn requires a preview before the first real trash on a fresh observed store.".loc)
                         .opacity(0.9)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -393,7 +393,7 @@ public struct RunDetailSheet: View {
         case .unexpected(let reason):
             Callout(.pending, icon: "exclamationmark.triangle") {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Trash didn't finish").fontWeight(.semibold)
+                    Text("Trash didn't finish".loc).fontWeight(.semibold)
                     Text(reason).opacity(0.9)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -469,7 +469,7 @@ public struct RunDetailSheet: View {
                     .foregroundStyle(t.textHint)
                     .accessibilityHidden(true)
                 TextField("", text: $filter, prompt:
-                    Text("Filter by filename…")
+                    Text("Filter by filename…".loc)
                         .font(.cairnScaled(size: 12, design: .monospaced))
                         .foregroundColor(t.textHint)
                 )
@@ -489,7 +489,7 @@ public struct RunDetailSheet: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Clear filter")
+                    .accessibilityLabel("Clear filter".loc)
                 }
             }
             .padding(.horizontal, 10)
@@ -503,7 +503,7 @@ public struct RunDetailSheet: View {
 
             if !selectableAssets.isEmpty {
                 Button(action: toggleSelectAllVisible) {
-                    Text(allVisibleSelected ? "Deselect" : "Select all")
+                    Text(allVisibleSelected ? "Deselect".loc : "Select all".loc)
                         .font(.cairnScaled(size: 11, weight: .semibold))
                         .foregroundStyle(t.textBody)
                         .padding(.horizontal, 10)
@@ -532,7 +532,7 @@ public struct RunDetailSheet: View {
                     Circle()
                         .fill(t.textMuted)
                         .frame(width: 5, height: 5)
-                    Text("IN TRASH")
+                    Text("IN TRASH".loc)
                         .font(.cairnScaled(size: 11, weight: .semibold))
                         .tracking(0.9)
                         .foregroundStyle(t.textMuted)
@@ -644,7 +644,7 @@ public struct RunDetailSheet: View {
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
                 // from screens/run-detail.jsx — keep verbatim
-                Text("Find these in Immich's Tags view. Assets stay in Trash for 30 days.")
+                Text("Find these in Immich's Tags view. Assets stay in Trash for 30 days.".loc)
                     .font(.cairnScaled(size: 12))
                     .foregroundStyle(t.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -684,7 +684,7 @@ public struct RunDetailSheet: View {
         } else if canRestore {
             HStack(spacing: 10) {
                 Button(action: onClose) {
-                    Text("Close")
+                    Text("Close".loc)
                         .font(.cairnScaled(size: 16, weight: .semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
@@ -695,7 +695,7 @@ public struct RunDetailSheet: View {
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
 
-                Text("Select assets to act on them")
+                Text("Select assets to act on them".loc)
                     .font(.cairnScaled(size: 13))
                     .foregroundStyle(t.textMuted)
                     .frame(maxWidth: .infinity, minHeight: 44)
@@ -706,7 +706,7 @@ public struct RunDetailSheet: View {
             .background(footerSurface)
         } else {
             Button(action: onClose) {
-                Text("Close")
+                Text("Close".loc)
                     .font(.cairnScaled(size: 16, weight: .semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
@@ -991,7 +991,7 @@ private struct SelectionActionBar: View {
     private var countRow: some View {
         HStack(spacing: 8) {
             // Selection count pill
-            Text("\(selectedCount) selected")
+            Text(CairnL10n.isChinese ? "已选择 \(selectedCount) 项" : "\(selectedCount) selected")
                 .font(.cairnScaled(size: 12, weight: .semibold))
                 .foregroundStyle(t.primaryInk)
                 .padding(.horizontal, 9)
@@ -1014,7 +1014,7 @@ private struct SelectionActionBar: View {
                 .clipShape(Capsule())
             }
 
-            Button("Clear", action: onClear)
+            Button("Clear".loc, action: onClear)
                 .font(.cairnScaled(size: 12))
                 .foregroundStyle(t.textMuted)
                 .buttonStyle(.plain)
@@ -1063,7 +1063,7 @@ private struct ActionButton: View {
             VStack(spacing: 4) {
                 Image(systemName: icon)
                     .font(.cairnScaled(size: 18, weight: .semibold))
-                Text(label)
+                Text(label.loc)
                     .font(.cairnScaled(size: 11, weight: .semibold))
                     .tracking(0.2)
             }

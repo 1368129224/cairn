@@ -65,6 +65,7 @@ public struct CairnAppRoot: View {
     }
 
     public var body: some View {
+        let _ = { CairnL10n.currentLanguage = model.settings.appLanguage }()
         bodyContent
             #if canImport(UIKit)
             .sheet(isPresented: Binding(
@@ -78,14 +79,14 @@ public struct CairnAppRoot: View {
             }
             #endif
             .alert(
-                "Import complete",
+                "Import complete".loc,
                 isPresented: Binding(
                     get: { importResult != nil },
                     set: { if !$0 { importResult = nil } }
                 ),
                 presenting: importResult
             ) { _ in
-                Button("OK", role: .cancel) { importResult = nil }
+                Button("OK".loc, role: .cancel) { importResult = nil }
             } message: { result in
                 Text(importResultMessage(for: result))
             }
@@ -166,6 +167,8 @@ public struct CairnAppRoot: View {
         // any view that renders a time (RunsScreen rows, journal tail
         // — via refresh — etc.) reads from a single source.
         .environment(\.cairnTimeFormat, model.settings.timeDisplayFormat)
+        .environment(\.locale, CairnL10n.currentLocale)
+        .id("cairn-root-\(model.settings.appLanguage.rawValue)")
         .animation(reduceMotion ? .none : .snappy(duration: 0.18), value: model.needsOnboarding)
         .animation(reduceMotion ? .none : .snappy(duration: 0.18), value: model.hasCompletedInitialScan)
         .animation(reduceMotion ? .none : .snappy(duration: 0.18), value: model.settingsRoute)
@@ -182,14 +185,14 @@ public struct CairnAppRoot: View {
         // permission denied, API key rejected, network down) and the user
         // would see a "tap does nothing" interaction with no feedback.
         .alert(
-            "Couldn't finish",
+            "Couldn't finish".loc,
             isPresented: Binding(
                 get: { model.lastError != nil },
                 set: { if !$0 { model.lastError = nil } }
             ),
             presenting: model.lastError
         ) { _ in
-            Button("OK", role: .cancel) { model.lastError = nil }
+            Button("OK".loc, role: .cancel) { model.lastError = nil }
         } message: { message in
             Text(message)
         }
