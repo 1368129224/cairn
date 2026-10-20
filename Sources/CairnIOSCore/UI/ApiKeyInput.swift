@@ -30,6 +30,7 @@ public struct ApiKeyInput: View {
     @State private var revealed: Bool = false
     @FocusState private var focused: Bool
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
 
     public init(
         text: Binding<String>,
@@ -54,7 +55,7 @@ public struct ApiKeyInput: View {
                 TextField(placeholder, text: $text)
                     .textFieldStyle(.plain)
                     .font(.cairnScaled(size: 14, design: .monospaced))
-                    .accessibilityLabel("API key")
+                    .accessibilityLabel(lang.t("API key"))
                     // Single-line + horizontal scroll. Without this, a
                     // long pasted key wraps to a second line, which
                     // would poke out below the masking overlay since the
@@ -117,7 +118,7 @@ public struct ApiKeyInput: View {
             }
             .buttonStyle(.plain)
             .padding(.trailing, 4)
-            .accessibilityLabel(revealed ? "Hide API key" : "Show API key")
+            .accessibilityLabel(revealed ? lang.t("Hide API key") : lang.t("Show API key"))
         }
     }
 

@@ -472,4 +472,51 @@ struct JSONFileSettingsStoreTests {
         #expect(loaded == second)
         #expect(loaded != first)
     }
+
+    @Test("AppLanguage encodes and decodes cleanly with system fallback")
+    func appLanguageRoundTrip() throws {
+        for lang in AppLanguage.allCases {
+            let settings = CairnSettings(appLanguage: lang)
+            let data = try JSONEncoder().encode(settings)
+            let decoded = try JSONDecoder().decode(CairnSettings.self, from: data)
+            #expect(decoded.appLanguage == lang)
+        }
+    }
+
+    @Test("legacy JSON without appLanguage decodes as .system")
+    func legacyJSONMissingAppLanguageUsesSystem() throws {
+        let legacyJSON = """
+        {
+            "maxDeletePercent": 1.0,
+            "minDeleteFloor": 5,
+            "notifyOnAbort": true,
+            "verboseLogging": false,
+            "deletionStrictness": "strict"
+        }
+        """
+        let decoded = try JSONDecoder().decode(CairnSettings.self, from: Data(legacyJSON.utf8))
+        #expect(decoded.appLanguage == .system)
+    }
+
+    @Test("AppLanguage resolution honors explicit overrides and system preferred languages")
+    func appLanguageResolution() {
+        #expect(AppLanguage.system.displayName == "System")
+        #expect(AppLanguage.english.displayName == "English")
+        #expect(AppLanguage.chineseSimplified.displayName == "简体中文")
+
+        #expect(AppLanguage.english.resolvesToChinese(preferredLanguages: ["zh-Hans-CN"]) == false)
+        #expect(AppLanguage.chineseSimplified.resolvesToChinese(preferredLanguages: ["en-US"]) == true)
+        #expect(AppLanguage.system.resolvesToChinese(preferredLanguages: ["zh-Hans-CN", "en-US"]) == true)
+        #expect(AppLanguage.system.resolvesToChinese(preferredLanguages: ["zh-Hant-TW"]) == true)
+        #expect(AppLanguage.system.resolvesToChinese(preferredLanguages: ["en-US", "zh-Hans-CN"]) == false)
+        #expect(AppLanguage.system.resolvesToChinese(preferredLanguages: []) == false)
+
+        #expect(AppLanguage.english.resolvedLanguageCode(preferredLanguages: ["zh-Hans"]) == "en")
+        #expect(AppLanguage.chineseSimplified.resolvedLanguageCode(preferredLanguages: ["en-US"]) == "zh-Hans")
+        #expect(AppLanguage.system.resolvedLanguageCode(preferredLanguages: ["zh-Hans-CN"]) == "zh-Hans")
+        #expect(AppLanguage.system.resolvedLanguageCode(preferredLanguages: ["en-US"]) == "en")
+
+        #expect(AppLanguage.english.resolvedLocale(preferredLanguages: ["zh-Hans"]).identifier == "en_US")
+        #expect(AppLanguage.chineseSimplified.resolvedLocale(preferredLanguages: ["en-US"]).identifier == "zh_Hans")
+    }
 }

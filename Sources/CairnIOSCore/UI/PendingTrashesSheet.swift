@@ -23,6 +23,7 @@ public struct PendingTrashesSheet: View {
     public let onDiscard: (UUID) -> Void
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
 
     public init(
         intents: [PendingTrashIntent] = [],
@@ -41,14 +42,14 @@ public struct PendingTrashesSheet: View {
     public var body: some View {
         VStack(spacing: 0) {
             AppHeader(
-                title: "Pending trashes",
+                title: lang.t("Pending trashes"),
                 subtitle: subtitle,
                 leading: {
                     Button(action: onClose) {
                         HStack(spacing: 4) {
                             Image(systemName: "chevron.left")
                                 .font(.cairnScaled(size: 13, weight: .semibold))
-                            Text("Status")
+                            Text(lang.t("Status"))
                                 .font(.cairnScaled(size: 15))
                         }
                         .foregroundStyle(t.textBody)
@@ -80,11 +81,11 @@ public struct PendingTrashesSheet: View {
 
     private var subtitle: String {
         let n = intents.count
-        return n == 1 ? "1 request" : "\(n) requests"
+        return n == 1 ? lang.t("1 request") : lang.f("%@ requests", "\(n)")
     }
 
     private var explainer: some View {
-        Text("These trash runs failed and are queued for retry. They run automatically on the next sync. Items hit the retry limit (\(maxRetryAttempts) attempts) typically when the server is unreachable or the API key has changed — fix the root cause and tap Retry now.")
+        Text(lang.f("These trash runs failed and are queued for retry. They run automatically on the next sync. Items hit the retry limit (%@ attempts) typically when the server is unreachable or the API key has changed — fix the root cause and tap Retry now.", "\(maxRetryAttempts)"))
             .font(.cairnScaled(size: 13))
             .foregroundStyle(t.textMuted)
             .fixedSize(horizontal: false, vertical: true)
@@ -94,7 +95,7 @@ public struct PendingTrashesSheet: View {
         Button(action: onRetryAll) {
             HStack(spacing: 8) {
                 Image(systemName: "arrow.clockwise")
-                Text("Retry all now")
+                Text(lang.t("Retry all now"))
                     .fontWeight(.semibold)
             }
             .frame(maxWidth: .infinity)
@@ -157,16 +158,21 @@ public struct PendingTrashesSheet: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Discard pending trash")
+            .accessibilityLabel(lang.t("Discard pending trash"))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
     }
 
     private func metaLine(intent: PendingTrashIntent, isStuck: Bool) -> String {
-        let attempts = intent.attemptCount == 1 ? "1 attempt" : "\(intent.attemptCount) attempts"
-        if isStuck { return "Stuck — \(attempts) of \(maxRetryAttempts) used" }
-        return "\(attempts) so far"
+        if isStuck {
+            return intent.attemptCount == 1
+                ? lang.f("Stuck — 1 attempt of %@ used", "\(maxRetryAttempts)")
+                : lang.f("Stuck — %@ attempts of %@ used", "\(intent.attemptCount)", "\(maxRetryAttempts)")
+        }
+        return intent.attemptCount == 1
+            ? lang.t("1 attempt so far")
+            : lang.f("%@ attempts so far", "\(intent.attemptCount)")
     }
 
     private var emptyState: some View {
@@ -175,10 +181,10 @@ public struct PendingTrashesSheet: View {
             Image(systemName: "checkmark.circle")
                 .font(.cairnScaled(size: 36, weight: .light))
                 .foregroundStyle(t.verifiedInk)
-            Text("Nothing pending")
+            Text(lang.t("Nothing pending"))
                 .font(.cairnScaled(size: 17, weight: .semibold))
                 .foregroundStyle(t.text)
-            Text("All trash requests completed successfully.")
+            Text(lang.t("All trash requests completed successfully."))
                 .font(.cairnScaled(size: 13))
                 .foregroundStyle(t.textMuted)
             Spacer()

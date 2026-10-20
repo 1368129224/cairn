@@ -28,6 +28,7 @@ public struct AlbumPickerSheet: View {
     public let albumsOverride: [Album]?
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
     @State private var selection: Set<String>
     @State private var albums: [Album] = []
     @State private var loadState: LoadState = .loading
@@ -81,12 +82,12 @@ public struct AlbumPickerSheet: View {
 
     private var header: some View {
         HStack {
-            Button("Cancel", action: onClose)
+            Button(lang.t("Cancel"), action: onClose)
                 .font(.cairnScaled(size: 15))
                 .foregroundStyle(t.textBody)
             Spacer()
             VStack(spacing: 1) {
-                Text("Selected albums")
+                Text(lang.t("Selected albums"))
                     .font(.cairnScaled(size: 15, weight: .semibold))
                     .foregroundStyle(t.text)
                 Text(selectionSummary)
@@ -95,7 +96,7 @@ public struct AlbumPickerSheet: View {
                     .monospacedDigit()
             }
             Spacer()
-            Button("Done") {
+            Button(lang.t("Done")) {
                 onSave(selection)
                 onClose()
             }
@@ -116,9 +117,9 @@ public struct AlbumPickerSheet: View {
     private var selectionSummary: String {
         let n = selection.count
         switch n {
-        case 0: return "Pick at least one"
-        case 1: return "1 album selected"
-        default: return "\(n) albums selected"
+        case 0: return lang.t("Pick at least one")
+        case 1: return lang.t("1 album selected")
+        default: return lang.f("%@ albums selected", "\(n)")
         }
     }
 
@@ -141,7 +142,7 @@ public struct AlbumPickerSheet: View {
     private var loadingState: some View {
         VStack(spacing: 12) {
             ProgressView()
-            Text("Loading albums…")
+            Text(lang.t("Loading albums…"))
                 .font(.cairnScaled(size: 13))
                 .foregroundStyle(t.textMuted)
         }
@@ -153,10 +154,10 @@ public struct AlbumPickerSheet: View {
             Image(systemName: "lock")
                 .font(.cairnScaled(size: 28))
                 .foregroundStyle(t.textMuted)
-            Text("Photos access required")
+            Text(lang.t("Photos access required"))
                 .font(.cairnScaled(size: 15, weight: .semibold))
                 .foregroundStyle(t.text)
-            Text("Grant Full Photos access in Settings → cairn → Photos to pick albums.")
+            Text(lang.t("Grant Full Photos access in Settings → cairn → Photos to pick albums."))
                 .font(.cairnScaled(size: 13))
                 .foregroundStyle(t.textMuted)
                 .multilineTextAlignment(.center)
@@ -170,10 +171,10 @@ public struct AlbumPickerSheet: View {
             Image(systemName: "rectangle.stack")
                 .font(.cairnScaled(size: 28))
                 .foregroundStyle(t.textMuted)
-            Text("No user-created albums")
+            Text(lang.t("No user-created albums"))
                 .font(.cairnScaled(size: 15, weight: .semibold))
                 .foregroundStyle(t.text)
-            Text("Create an album in Photos.app to scope cairn to it.")
+            Text(lang.t("Create an album in Photos.app to scope cairn to it."))
                 .font(.cairnScaled(size: 13))
                 .foregroundStyle(t.textMuted)
                 .multilineTextAlignment(.center)
@@ -227,11 +228,11 @@ public struct AlbumPickerSheet: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(album.title), \(assetCountLabel(album.assetCount))")
-        .accessibilityValue(isSelected ? "selected" : "not selected")
+        .accessibilityValue(isSelected ? lang.t("Selected") : lang.t("Not selected"))
     }
 
     private func assetCountLabel(_ n: Int) -> String {
-        n == 1 ? "1 photo" : "\(n) photos"
+        n == 1 ? lang.t("1 photo") : lang.f("%@ photos", "\(n)")
     }
 
     private func toggle(_ id: String) {

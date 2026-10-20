@@ -39,6 +39,7 @@ public struct RunsScreen: View {
     public let scrollResetToken: Int
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Default `now` matches the prototype's pinned clock in
@@ -92,8 +93,12 @@ public struct RunsScreen: View {
         VStack(alignment: .leading, spacing: 0) {
             // Subtitle copy from screens/runs.jsx:83 — "<n> total · last <relTime>".
             AppHeader(
-                title: "Runs",
-                subtitle: "\(runs.count) total · last \(CairnTimeHelpers.relativeTime(sortedRuns.first?.startedAt ?? now, now: now))"
+                title: lang.t("Runs"),
+                subtitle: lang.f(
+                    "%@ total · last %@",
+                    "\(runs.count)",
+                    CairnTimeHelpers.relativeTime(sortedRuns.first?.startedAt ?? now, now: now, language: lang)
+                )
             )
 
             ForEach(dayGroups, id: \.dayKey) { group in
@@ -136,7 +141,7 @@ public struct RunsScreen: View {
             .map { day in
                 DayGroup(
                     dayKey: day,
-                    label: Self.dayLabel(day, now: now, calendar: cal),
+                    label: Self.dayLabel(day, now: now, calendar: cal, language: lang),
                     runs: bucketed[day] ?? []
                 )
             }
@@ -147,12 +152,22 @@ public struct RunsScreen: View {
     /// day: 'numeric' })`) but adds Today/Yesterday affordances since the
     /// prototype's date string is already implicitly "today" or
     /// "yesterday" most of the time.
-    private static func dayLabel(_ day: Date, now: Date, calendar: Calendar) -> String {
-        if calendar.isDate(day, inSameDayAs: now) { return "Today" }
+    private static func dayLabel(
+        _ day: Date,
+        now: Date,
+        calendar: Calendar,
+        language: AppLanguage
+    ) -> String {
+        if calendar.isDate(day, inSameDayAs: now) { return language.t("Today") }
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
-           calendar.isDate(day, inSameDayAs: yesterday) { return "Yesterday" }
+           calendar.isDate(day, inSameDayAs: yesterday) { return language.t("Yesterday") }
         let f = DateFormatter()
-        f.dateFormat = "EEE, MMMM d"
+        f.locale = language.locale
+        if language.isChinese {
+            f.dateFormat = "M月d日 EEE"
+        } else {
+            f.dateFormat = "EEE, MMMM d"
+        }
         return f.string(from: day)
     }
 
@@ -163,7 +178,7 @@ public struct RunsScreen: View {
     /// what a "run" actually contains before they have one to look at.
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 0) {
-            AppHeader(title: "Runs", subtitle: "No runs yet")
+            AppHeader(title: lang.t("Runs"), subtitle: lang.t("No runs yet"))
 
             VStack(spacing: 0) {
                 // Dashed icon tile.
@@ -181,13 +196,13 @@ public struct RunsScreen: View {
                 }
                 .padding(.bottom, 18)
 
-                Text("No runs yet.")
+                Text(lang.t("No runs yet."))
                     .font(.cairnScaled(size: 18, weight: .semibold))
                     .tracking(-0.27)
                     .foregroundStyle(t.text)
                     .padding(.bottom, 6)
 
-                Text("Every sync lands here — completed, aborted, or restored — with the candidate list and the journal of API calls. You can restore any trashed batch while Immich still has it.")
+                Text(lang.t("Every sync lands here — completed, aborted, or restored — with the candidate list and the journal of API calls. You can restore any trashed batch while Immich still has it."))
                     .font(.cairnScaled(size: 13))
                     .foregroundStyle(t.textMuted)
                     .multilineTextAlignment(.center)
@@ -201,7 +216,7 @@ public struct RunsScreen: View {
 
                 // CTA (verbatim, screens/runs.jsx:67).
                 Button(action: onStartSync) {
-                    Text("Start a sync from Status")
+                    Text(lang.t("Start a sync from Status"))
                         .font(.cairnScaled(size: 16, weight: .semibold))
                         .frame(minWidth: 200)
                         .padding(.vertical, 14)
@@ -221,13 +236,13 @@ public struct RunsScreen: View {
     private var runIncludesCard: some View {
         // Lines copied verbatim from screens/runs.jsx:38–43.
         let lines = [
-            "Thumbnails + filenames of every candidate",
-            "Safety-rail outcome (pass or tripped)",
-            "Raw journal of every Immich API call",
-            "One-tap restore for trashed assets",
+            lang.t("Thumbnails + filenames of every candidate"),
+            lang.t("Safety-rail outcome (pass or tripped)"),
+            lang.t("Raw journal of every Immich API call"),
+            lang.t("One-tap restore for trashed assets"),
         ]
         return VStack(alignment: .leading, spacing: 0) {
-            Text("A run includes".uppercased())
+            Text(lang.t("A run includes").uppercased())
                 .font(.cairnScaled(size: 11, weight: .semibold))
                 .tracking(0.88)
                 .foregroundStyle(t.textHint)
@@ -288,6 +303,7 @@ private struct RunListRow: View {
     let onOpen: () -> Void
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
 
     var body: some View {
         Button(action: onOpen) {
@@ -304,16 +320,16 @@ private struct RunListRow: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
-                        StatusPill(label: pillLabel, tone: pillTone)
-                        Text("\(countLabel)")
+                        StatusPill(label: lang.t(pillLabel), tone: pillTone)
+                        Text(countLabel)
                             .font(.cairnScaled(size: 13, weight: .medium))
                             .foregroundStyle(t.textBody)
                         if run.restored > 0 {
-                            StatusPill(label: "\(run.restored) restored", tone: .neutral)
+                            StatusPill(label: lang.f("%@ restored", "\(run.restored)"), tone: .neutral)
                         }
                     }
                     HStack(spacing: 4) {
-                        Text(CairnTimeHelpers.relativeTime(run.startedAt, now: now))
+                        Text(CairnTimeHelpers.relativeTime(run.startedAt, now: now, language: lang))
                             .font(.cairnScaled(size: 11.5))
                             .foregroundStyle(t.textHint)
                         Text("·")
@@ -360,10 +376,10 @@ private struct RunListRow: View {
     }
 
     private var countLabel: String {
-        if run.status == .aborted { return "0 trashed" }
-        if run.dryRun { return "0 trashed" }
-        if run.trashed == 0 { return "no changes" }
-        return "\(run.trashed) trashed"
+        if run.status == .aborted { return lang.t("0 trashed") }
+        if run.dryRun { return lang.t("0 trashed") }
+        if run.trashed == 0 { return lang.t("no changes") }
+        return lang.f("%@ trashed", "\(run.trashed)")
     }
 
     private var iconName: String {

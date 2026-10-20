@@ -656,10 +656,13 @@ public final class CairnAppModel {
         // Polite priority queues behind in-flight speech rather than
         // interrupting, which matches "background activity" vibes
         // better than .high for a multi-second background operation.
+        let lang = settings.appLanguage
         if next != .idle {
-            AccessibilityNotification.Announcement("Sync phase: \(next.displayName)").post()
+            AccessibilityNotification.Announcement(
+                lang.f("Sync phase: %@", lang.t(next.displayName))
+            ).post()
         } else if next == .idle && syncTimeline.last?.phase == .finalizing {
-            AccessibilityNotification.Announcement("Sync complete").post()
+            AccessibilityNotification.Announcement(lang.t("Sync complete")).post()
         }
     }
 

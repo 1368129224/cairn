@@ -84,6 +84,7 @@ public struct InitialScanScreen: View {
     public let onDismiss: () -> Void
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var optionsExpanded: Bool = false
     /// Latched true the moment the user taps "Stop indexing." The
@@ -416,8 +417,8 @@ public struct InitialScanScreen: View {
     /// value doesn't bounce on every render.
     private var remainingDisplay: String {
         guard isActive || isPaused else { return "—" }
-        if let eta = publishedEta { return Self.formatDuration(eta) }
-        return "estimating…"
+        if let eta = publishedEta { return Self.formatDuration(eta, language: lang) }
+        return lang.t("estimating…")
     }
 
     /// Coefficient of variation across the recent published-ETA
@@ -588,7 +589,7 @@ public struct InitialScanScreen: View {
     }
 
     private var headline: some View {
-        Text("Indexing your library")
+        Text(lang.t("Indexing your library"))
             .font(.cairnScaled(size: 26, weight: .semibold))
             .tracking(-0.5)
             .foregroundStyle(t.text)
@@ -600,9 +601,17 @@ public struct InitialScanScreen: View {
     private var subtext: some View {
         Group {
             if hasCache {
-                (Text.cairnWord + Text(" found \(hashed.formatted(.number)) cached hashes from a previous run. Tap resume to pick up where you left off."))
+                if lang.isChinese {
+                    (Text.cairnWord + Text(" 发现上次运行缓存的 \(hashed.formatted(.number)) 个 SHA1 哈希。轻点继续以从中断处恢复。"))
+                } else {
+                    (Text.cairnWord + Text(" found \(hashed.formatted(.number)) cached hashes from a previous run. Tap resume to pick up where you left off."))
+                }
             } else {
-                (Text.cairnWord + Text(" hashes every photo once so it can tell a deletion apart from a sync hiccup. This only happens on first run."))
+                if lang.isChinese {
+                    (Text.cairnWord + Text(" 会为每张照片计算一次哈希，以便区分真实删除与同步异常。这仅在首次运行时执行。"))
+                } else {
+                    (Text.cairnWord + Text(" hashes every photo once so it can tell a deletion apart from a sync hiccup. This only happens on first run."))
+                }
             }
         }
         .font(.cairnScaled(size: 14))
@@ -621,7 +630,7 @@ public struct InitialScanScreen: View {
                     Text("\(hashed.formatted(.number)) / \(total.formatted(.number))")
                         .font(.cairnScaled(size: 28, weight: .semibold).monospacedDigit())
                         .foregroundStyle(t.text)
-                    Text("processed")
+                    Text(lang.t("processed"))
                         .font(.cairnScaled(size: 14))
                         .foregroundStyle(t.textMuted)
                     Spacer()
@@ -629,7 +638,7 @@ public struct InitialScanScreen: View {
                         .font(.cairnScaled(size: 13, design: .monospaced).monospacedDigit())
                         .foregroundStyle(t.textMuted)
                 }
-                ProgressBar(fraction: fraction, tone: .pending, accessibilityLabel: "Initial scan progress")
+                ProgressBar(fraction: fraction, tone: .pending, accessibilityLabel: lang.t("Initial scan progress"))
                 if let prePhaseLabel {
                     HStack(spacing: 6) {
                         Image(systemName: "circle.dotted.circle")
@@ -682,20 +691,19 @@ public struct InitialScanScreen: View {
                 .font(.cairnScaled(size: 10))
                 .foregroundStyle(t.info)
             if let expected = serverAssetsExpected, expected > 0 {
-                Text("\(serverAssetsFetched.formatted(.number)) / \(expected.formatted(.number)) server assets fetched")
+                Text(lang.f("%@ / %@ server assets fetched", serverAssetsFetched.formatted(.number), expected.formatted(.number)))
                     .font(.cairnScaled(size: 12, weight: .medium))
                     .foregroundStyle(t.textBody)
             } else {
-                Text("\(serverAssetsFetched.formatted(.number)) server assets fetched")
+                Text(lang.f("%@ server assets fetched", serverAssetsFetched.formatted(.number)))
                     .font(.cairnScaled(size: 12, weight: .medium))
                     .foregroundStyle(t.textBody)
             }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            serverAssetsExpected.map {
-                "Fetched \(serverAssetsFetched) of \($0) server assets"
-            } ?? "Fetched \(serverAssetsFetched) server assets"
+            serverAssetsExpected.map { lang.f("Fetched %@ of %@ server assets", "\(serverAssetsFetched)", "\($0)") }
+                ?? lang.f("Fetched %@ server assets", "\(serverAssetsFetched)")
         )
     }
 
@@ -722,12 +730,12 @@ public struct InitialScanScreen: View {
             Image(systemName: "rectangle.stack.badge.magnifyingglass")
                 .font(.cairnScaled(size: 10))
                 .foregroundStyle(t.pendingInk)
-            Text("\((scanned ?? 0).formatted(.number)) / \(total.formatted(.number)) phone assets scanned")
+            Text(lang.f("%@ / %@ phone assets scanned", (scanned ?? 0).formatted(.number), total.formatted(.number)))
                 .font(.cairnScaled(size: 12, weight: .medium))
                 .foregroundStyle(t.textBody)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Scanned \(scanned ?? 0) of \(total) phone assets")
+        .accessibilityLabel(lang.f("Scanned %@ of %@ phone assets", "\(scanned ?? 0)", "\(total)"))
     }
 
     /// One-line caption shown when the fast-initial-scan path
@@ -741,15 +749,15 @@ public struct InitialScanScreen: View {
             Image(systemName: "icloud.and.arrow.down")
                 .font(.cairnScaled(size: 10))
                 .foregroundStyle(t.info)
-            Text("\(imputed.formatted(.number)) trust-seeded from server")
+            Text(lang.f("%@ trust-seeded from server", imputed.formatted(.number)))
                 .font(.cairnScaled(size: 12, weight: .medium))
                 .foregroundStyle(t.textBody)
-            Text("(skipped local hashing)")
+            Text(lang.t("(skipped local hashing)"))
                 .font(.cairnScaled(size: 12))
                 .foregroundStyle(t.textMuted)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(imputed) assets trust-seeded from server, skipped local hashing")
+        .accessibilityLabel(lang.f("%@ assets trust-seeded from server, skipped local hashing", "\(imputed)"))
     }
 
     /// Phase label shown when the per-asset counter can't yet advance —
@@ -762,7 +770,7 @@ public struct InitialScanScreen: View {
         guard isActive else { return nil }
         switch phase {
         case .preparing, .fetchingServer, .imputingFromServer, .reconciling, .finalizing:
-            return phase.displayName
+            return lang.t(phase.displayName)
         case .hashing, .idle:
             return nil
         }
@@ -781,16 +789,16 @@ public struct InitialScanScreen: View {
         TimelineView(.periodic(from: Date(), by: 1.0)) { context in
             HStack(spacing: 24) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("ELAPSED")
+                    Text(lang.t("ELAPSED"))
                         .font(.cairnScaled(size: 10, weight: .semibold))
                         .tracking(0.9)
                         .foregroundStyle(t.textHint)
-                    Text(elapsedTime(now: context.date).map(Self.formatDuration) ?? "—")
+                    Text(elapsedTime(now: context.date).map { Self.formatDuration($0, language: lang) } ?? "—")
                         .font(.cairnScaled(size: 14, weight: .semibold).monospacedDigit())
                         .foregroundStyle(t.textBody)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("REMAINING")
+                    Text(lang.t("REMAINING"))
                         .font(.cairnScaled(size: 10, weight: .semibold))
                         .tracking(0.9)
                         .foregroundStyle(t.textHint)
@@ -812,8 +820,13 @@ public struct InitialScanScreen: View {
     /// pausing.
     private var expectationsCallout: some View {
         Callout(.info, icon: "clock.arrow.circlepath") {
-            (Text("The scan runs fastest with the app open. iOS pauses the work when you background it; ") + .cairnWord + Text(" resumes where it left off when you return — nothing re-hashes."))
-                .fixedSize(horizontal: false, vertical: true)
+            if lang.isChinese {
+                (Text("应用保持在前台时扫描速度最快。切到后台时 iOS 会暂停处理；返回后 ") + .cairnWord + Text(" 将从中断处继续 — 无需重新计算哈希。"))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                (Text("The scan runs fastest with the app open. iOS pauses the work when you background it; ") + .cairnWord + Text(" resumes where it left off when you return — nothing re-hashes."))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
@@ -838,7 +851,7 @@ public struct InitialScanScreen: View {
                         Image(systemName: "slider.horizontal.3")
                             .font(.cairnScaled(size: 13, weight: .medium))
                             .foregroundStyle(t.textMuted)
-                        Text("Scan options")
+                        Text(lang.t("Scan options"))
                             .font(.cairnScaled(size: 14, weight: .medium))
                             .foregroundStyle(t.textBody)
                         Spacer(minLength: 12)
@@ -851,7 +864,7 @@ public struct InitialScanScreen: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(optionsExpanded ? "Collapse scan options" : "Expand scan options")
+                .accessibilityLabel(optionsExpanded ? lang.t("Collapse scan options") : lang.t("Expand scan options"))
 
                 if optionsExpanded {
                     RowDivider()
@@ -860,8 +873,8 @@ public struct InitialScanScreen: View {
                     InitialScanHardCeilingRow(mb: $settings.iCloudMaxEverBytesMB)
                     RowDivider()
                     ToggleRow(
-                        "Keep screen on during sync",
-                        sub: "Prevents Auto-Lock while the sync is running. On by default for the first scan — the foreground hashing pass stalls if the device sleeps. Auto-disables after the first scan completes; re-enable from Settings → Library → Initial scan for any later big run.",
+                        lang.t("Keep screen on during sync"),
+                        sub: lang.t("Prevents Auto-Lock while the sync is running. On by default for the first scan — the foreground hashing pass stalls if the device sleeps. Auto-disables after the first scan completes; re-enable from Settings → Library → Initial scan for any later big run."),
                         value: $settings.keepScreenAwakeDuringSync
                     )
                 }
@@ -880,8 +893,8 @@ public struct InitialScanScreen: View {
             set: { settings.iCloudDownloadLimitMB = Int($0.rounded()) }
         )
         return SliderInputRow(
-            label: "iCloud download limit",
-            sub: "Larger assets queue for background hashing instead of blocking the initial scan.",
+            label: lang.t("iCloud download limit"),
+            sub: lang.t("Larger assets queue for background hashing instead of blocking the initial scan."),
             value: binding,
             range: Double(CairnSettings.iCloudDownloadLimitMBRange.lowerBound)...Double(CairnSettings.iCloudDownloadLimitMBRange.upperBound),
             step: 5,
@@ -913,7 +926,7 @@ public struct InitialScanScreen: View {
             HStack(spacing: 8) {
                 Image(systemName: "play.fill")
                     .font(.cairnScaled(size: 14, weight: .semibold))
-                Text(hashed > 0 ? "Resume indexing" : "Start indexing")
+                Text(hashed > 0 ? lang.t("Resume indexing") : lang.t("Start indexing"))
                     .font(.cairnScaled(size: 16, weight: .semibold))
             }
             .frame(maxWidth: .infinity)
@@ -936,7 +949,7 @@ public struct InitialScanScreen: View {
                         .controlSize(.mini)
                         .tint(t.textMuted)
                 }
-                Text(cancelRequested ? "Stopping…" : "Stop indexing")
+                Text(cancelRequested ? lang.t("Stopping…") : lang.t("Stop indexing"))
                     .font(.cairnScaled(size: 14, weight: .semibold))
                     .tracking(0.66)
                     .foregroundStyle(cancelRequested ? t.textMuted : t.dangerInk)
@@ -952,7 +965,7 @@ public struct InitialScanScreen: View {
         }
         .buttonStyle(CairnPressStyle())
         .disabled(cancelRequested)
-        .accessibilityLabel(cancelRequested ? "Stopping indexing" : "Stop indexing")
+        .accessibilityLabel(cancelRequested ? lang.t("Stopping indexing") : lang.t("Stop indexing"))
         .onChange(of: isActive) { _, _ in
             // Reset on either transition so a fresh scan starts with a
             // clean Stop button, and the spinner doesn't latch if the
@@ -970,7 +983,7 @@ public struct InitialScanScreen: View {
             HStack(spacing: 6) {
                 Image(systemName: "arrow.counterclockwise")
                     .font(.cairnScaled(size: 12, weight: .semibold))
-                Text("Start over")
+                Text(lang.t("Start over"))
                     .font(.cairnScaled(size: 14, weight: .medium))
             }
             .foregroundStyle(t.textMuted)
@@ -999,7 +1012,7 @@ public struct InitialScanScreen: View {
     ///   - active or paused → "Continue in app" (scan keeps going)
     @ViewBuilder
     private var dismissButton: some View {
-        let label = (isActive || isPaused) ? "Continue in app" : "Skip for now"
+        let label = (isActive || isPaused) ? lang.t("Continue in app") : lang.t("Skip for now")
         Button(action: onDismiss) {
             Text(label)
                 .font(.cairnScaled(size: 13))
@@ -1015,17 +1028,17 @@ public struct InitialScanScreen: View {
     /// Short duration ("1 min 23 sec", "12 sec", "2 hr 4 min"). We
     /// deliberately skip `DateComponentsFormatter` — its `.short` output
     /// ("1m, 23s") doesn't match the rest of the app's prose style.
-    static func formatDuration(_ seconds: TimeInterval) -> String {
+    static func formatDuration(_ seconds: TimeInterval, language: AppLanguage = .english) -> String {
         let total = Int(seconds.rounded())
         let h = total / 3600
         let m = (total % 3600) / 60
         let s = total % 60
         if h > 0 {
-            return "\(h) hr \(m) min"
+            return language.f("%@ hr %@ min", "\(h)", "\(m)")
         } else if m > 0 {
-            return "\(m) min \(s) sec"
+            return language.f("%@ min %@ sec", "\(m)", "\(s)")
         } else {
-            return "\(s) sec"
+            return language.f("%@ sec", "\(s)")
         }
     }
 }
@@ -1036,6 +1049,7 @@ public struct InitialScanScreen: View {
 private struct InitialScanHardCeilingRow: View {
     @Binding var mb: Int?
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
 
     /// Remembers the last enabled value so toggling off and back on
     /// restores what the user had set, not the cold-start default.
@@ -1078,7 +1092,7 @@ private struct InitialScanHardCeilingRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Never-touch ceiling")
+                Text(lang.t("Never-touch ceiling"))
                     .font(.cairnScaled(size: 14))
                     .foregroundStyle(t.textBody)
                 Spacer()
@@ -1098,7 +1112,7 @@ private struct InitialScanHardCeilingRow: View {
                 )
                 .tint(t.verified)
                 HStack {
-                    Text("Assets above this stay out of scope — ideal for multi-GB archived video.")
+                    Text(lang.t("Assets above this stay out of scope — ideal for multi-GB archived video."))
                         .font(.cairnScaled(size: 11))
                         .foregroundStyle(t.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1113,7 +1127,7 @@ private struct InitialScanHardCeilingRow: View {
                     )
                 }
             } else {
-                Text("Off. Every asset is eligible, however large.")
+                Text(lang.t("Off. Every asset is eligible, however large."))
                     .font(.cairnScaled(size: 11))
                     .foregroundStyle(t.textMuted)
             }

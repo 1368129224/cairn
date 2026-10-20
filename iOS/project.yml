@@ -11,6 +11,9 @@ options:
   groupSortPosition: top
   generateEmptyDirectories: true
   developmentLanguage: en
+  knownRegions:
+    - en
+    - zh-Hans
 
 # Local SPM packages — point at the parent directory where Package.swift lives.
 # Both CairnCore and CairnIOSCore are produced by that one Package.swift.
@@ -46,6 +49,9 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: cairn
+        CFBundleLocalizations:
+          - en
+          - zh-Hans
         CFBundleShortVersionString: "0.4.5"
         CFBundleVersion: "151"
         # Required for PhotoKit access. The string is shown in the iOS

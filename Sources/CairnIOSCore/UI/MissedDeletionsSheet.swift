@@ -31,6 +31,7 @@ public struct MissedDeletionsSheet: View {
     public let onDismissOne: (_ assetId: String) -> Void
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
     @State private var pendingTrashAll: Bool = false
     @State private var pendingKeepAll: Bool = false
     @State private var dismissedIds: Set<String> = []
@@ -79,28 +80,28 @@ public struct MissedDeletionsSheet: View {
             }
         }
         .confirmationDialog(
-            "Trash \(visibleAssets.count) on Immich?",
+            lang.f("Trash %@ on Immich?", "\(visibleAssets.count)"),
             isPresented: $pendingTrashAll,
             titleVisibility: .visible
         ) {
-            Button("Move all \(visibleAssets.count) to trash", role: .destructive) {
+            Button(lang.f("Move all %@ to trash", "\(visibleAssets.count)"), role: .destructive) {
                 onTrash(visibleAssets)
             }
-            Button("Cancel", role: .cancel) {}
+            Button(lang.t("Cancel"), role: .cancel) {}
         } message: {
-            Text("They'll move to Immich's Trash. 30-day retention; restore from the Immich web UI if needed.")
+            Text(lang.t("They'll move to Immich's Trash. 30-day retention; restore from the Immich web UI if needed."))
         }
         .confirmationDialog(
-            "Keep all \(visibleAssets.count) on Immich?",
+            lang.f("Keep all %@ on Immich?", "\(visibleAssets.count)"),
             isPresented: $pendingKeepAll,
             titleVisibility: .visible
         ) {
-            Button("Exclude all \(visibleAssets.count)", role: .destructive) {
+            Button(lang.f("Exclude all %@", "\(visibleAssets.count)"), role: .destructive) {
                 onKeep(visibleAssets)
             }
-            Button("Cancel", role: .cancel) {}
+            Button(lang.t("Cancel"), role: .cancel) {}
         } message: {
-            Text("These will be added to cairn's exclusion list. Future scans skip them.")
+            Text(lang.t("These will be added to cairn's exclusion list. Future scans skip them."))
         }
         .overlay(zoomOverlay)
         .onChange(of: stateAssetIds) { _, _ in
@@ -113,18 +114,20 @@ public struct MissedDeletionsSheet: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Find missed deletions")
+                Text(lang.t("Find missed deletions"))
                     .font(.cairnScaled(size: 17, weight: .semibold))
                     .foregroundStyle(t.text)
                 if case .loaded(let assets) = state {
                     let visible = assets.filter { !dismissedIds.contains($0.id) }.count
-                    Text(visible == 0 ? "Nothing flagged" : "\(visible) candidate\(visible == 1 ? "" : "s")")
+                    Text(visible == 0
+                        ? lang.t("Nothing flagged")
+                        : (visible == 1 ? lang.f("%@ candidate", "\(visible)") : lang.f("%@ candidates", "\(visible)")))
                         .font(.cairnScaled(size: 12))
                         .foregroundStyle(t.textMuted)
                 }
             }
             Spacer()
-            Button("Done", action: onClose)
+            Button(lang.t("Done"), action: onClose)
                 .font(.cairnScaled(size: 15))
                 .foregroundStyle(t.textBody)
         }
@@ -164,12 +167,21 @@ public struct MissedDeletionsSheet: View {
                     .foregroundStyle(t.textMuted)
                     .padding(.top, 16)
 
-                (Text("Scans Immich for assets that look like prior iPhone uploads ") + .cairnWord + Text(" never observed. Use the Stricter filter to require positive evidence that ") + .cairnWord + Text(" previously saw the photo on this device — much more precise, but won't catch photos ") + .cairnWord + Text(" never observed at all."))
-                    .font(.cairnScaled(size: 13))
-                    .foregroundStyle(t.textMuted)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-                    .fixedSize(horizontal: false, vertical: true)
+                if lang.isChinese {
+                    (Text("在 Immich 上扫描看似来自过往 iPhone 上传但 ") + .cairnWord + Text(" 从未观察过的照片。开启更严格过滤会要求 ") + .cairnWord + Text(" 曾在此设备上见过该照片的明确记录 — 更加精准，但不会捕捉到 ") + .cairnWord + Text(" 完全未曾观察过的照片。"))
+                        .font(.cairnScaled(size: 13))
+                        .foregroundStyle(t.textMuted)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    (Text("Scans Immich for assets that look like prior iPhone uploads ") + .cairnWord + Text(" never observed. Use the Stricter filter to require positive evidence that ") + .cairnWord + Text(" previously saw the photo on this device — much more precise, but won't catch photos ") + .cairnWord + Text(" never observed at all."))
+                        .font(.cairnScaled(size: 13))
+                        .foregroundStyle(t.textMuted)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 autoScanCard
             }
@@ -183,7 +195,7 @@ public struct MissedDeletionsSheet: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(t.infoInk)
-                Text("Scan options")
+                Text(lang.t("Scan options"))
                     .font(.cairnScaled(size: 15, weight: .semibold))
                     .foregroundStyle(t.text)
             }
@@ -191,19 +203,26 @@ public struct MissedDeletionsSheet: View {
             Divider().background(t.divider)
             Toggle(isOn: $strictHistorical) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Stricter filter")
+                    Text(lang.t("Stricter filter"))
                         .font(.cairnScaled(size: 13, weight: .semibold))
                         .foregroundStyle(t.text)
-                    (Text("Only flag photos ") + .cairnWord + Text(" previously saw on this device. Excludes Immich-only uploads with iPhone-style filenames."))
-                        .font(.cairnScaled(size: 11))
-                        .foregroundStyle(t.textMuted)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if lang.isChinese {
+                        (Text("仅标记 ") + .cairnWord + Text(" 之前在此设备上见过的照片，排除带有 iPhone 风格文件名的仅 Immich 端上传。"))
+                            .font(.cairnScaled(size: 11))
+                            .foregroundStyle(t.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        (Text("Only flag photos ") + .cairnWord + Text(" previously saw on this device. Excludes Immich-only uploads with iPhone-style filenames."))
+                            .font(.cairnScaled(size: 11))
+                            .foregroundStyle(t.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
             .tint(t.verified)
             CairnChip(
-                "Start scan",
-                accessibilityLabel: "Start scan",
+                lang.t("Start scan"),
+                accessibilityLabel: lang.t("Start scan"),
                 action: { onScan(resolvedMin, resolvedMax, strictHistorical) }
             )
         }
@@ -219,13 +238,13 @@ public struct MissedDeletionsSheet: View {
     /// disabled (open-ended on that side).
     private var dateRangeControls: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("DATE RANGE")
+            Text(lang.t("DATE RANGE"))
                 .font(.cairnScaled(size: 11, weight: .semibold))
                 .tracking(0.99)
                 .foregroundStyle(t.textMuted)
             HStack {
                 Toggle(isOn: $minBoundEnabled) {
-                    Text("From")
+                    Text(lang.t("From"))
                         .font(.cairnScaled(size: 13))
                         .foregroundStyle(t.textBody)
                 }
@@ -233,14 +252,14 @@ public struct MissedDeletionsSheet: View {
                 .tint(t.verified)
                 if minBoundEnabled {
                     DatePicker(
-                        "From",
+                        lang.t("From"),
                         selection: $minCreatedAt,
                         in: ...maxCreatedAt,
                         displayedComponents: .date
                     )
                     .labelsHidden()
                 } else {
-                    Text("From: any")
+                    Text(lang.t("From: any"))
                         .font(.cairnScaled(size: 13))
                         .foregroundStyle(t.textMuted)
                 }
@@ -248,7 +267,7 @@ public struct MissedDeletionsSheet: View {
             }
             HStack {
                 Toggle(isOn: $maxBoundEnabled) {
-                    Text("To")
+                    Text(lang.t("To"))
                         .font(.cairnScaled(size: 13))
                         .foregroundStyle(t.textBody)
                 }
@@ -256,14 +275,14 @@ public struct MissedDeletionsSheet: View {
                 .tint(t.verified)
                 if maxBoundEnabled {
                     DatePicker(
-                        "To",
+                        lang.t("To"),
                         selection: $maxCreatedAt,
                         in: minCreatedAt...,
                         displayedComponents: .date
                     )
                     .labelsHidden()
                 } else {
-                    Text("To: now")
+                    Text(lang.t("To: now"))
                         .font(.cairnScaled(size: 13))
                         .foregroundStyle(t.textMuted)
                 }
@@ -277,7 +296,7 @@ public struct MissedDeletionsSheet: View {
             Spacer()
             ProgressView()
                 .controlSize(.large)
-            Text("Scanning Immich…")
+            Text(lang.t("Scanning Immich…"))
                 .font(.cairnScaled(size: 13))
                 .foregroundStyle(t.textMuted)
             Spacer()
@@ -295,14 +314,22 @@ public struct MissedDeletionsSheet: View {
                     .font(.cairnScaled(size: 22, weight: .semibold))
                     .foregroundStyle(t.infoInk)
             }
-            Text("Nothing flagged")
+            Text(lang.t("Nothing flagged"))
                 .font(.cairnScaled(size: 17, weight: .semibold))
                 .foregroundStyle(t.text)
-            (Text("Every server asset matches a photo still on your phone or one ") + .cairnWord + Text(" already knows about."))
-                .font(.cairnScaled(size: 13))
-                .foregroundStyle(t.textMuted)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 280)
+            if lang.isChinese {
+                (Text("服务器上的每张照片都与手机上仍存在的照片匹配，或属于 ") + .cairnWord + Text(" 已记录过的照片。"))
+                    .font(.cairnScaled(size: 13))
+                    .foregroundStyle(t.textMuted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 280)
+            } else {
+                (Text("Every server asset matches a photo still on your phone or one ") + .cairnWord + Text(" already knows about."))
+                    .font(.cairnScaled(size: 13))
+                    .foregroundStyle(t.textMuted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 280)
+            }
             Spacer()
         }
     }
@@ -313,7 +340,7 @@ public struct MissedDeletionsSheet: View {
             Image(systemName: "exclamationmark.triangle")
                 .font(.cairnScaled(size: 28))
                 .foregroundStyle(t.dangerInk)
-            Text("Couldn't scan")
+            Text(lang.t("Couldn't scan"))
                 .font(.cairnScaled(size: 17, weight: .semibold))
                 .foregroundStyle(t.text)
             Text(message)
@@ -322,8 +349,8 @@ public struct MissedDeletionsSheet: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
             CairnChip(
-                "Retry",
-                accessibilityLabel: "Retry",
+                lang.t("Retry"),
+                accessibilityLabel: lang.t("Retry"),
                 action: { onScan(resolvedMin, resolvedMax, strictHistorical) }
             )
             Spacer()
@@ -334,8 +361,13 @@ public struct MissedDeletionsSheet: View {
     private func loadedState(_ visible: [ServerAsset]) -> some View {
         VStack(spacing: 0) {
             Callout(.info, icon: "info.circle") {
-                (Text("These assets are on Immich, look like prior iPhone uploads, and aren't on your phone now. ") + .cairnWord + Text(" never observed them, so it didn't propagate the local deletion. Trash to clean them up; Keep to add to the exclusion list."))
-                    .fixedSize(horizontal: false, vertical: true)
+                if lang.isChinese {
+                    (Text("这些照片存在于 Immich 上，看似过往 iPhone 上传但当前不在手机中。") + .cairnWord + Text(" 从未观察过它们，因此未同步本地删除。移入 Immich Trash 以清理它们；选择保留以添加到排除列表。"))
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    (Text("These assets are on Immich, look like prior iPhone uploads, and aren't on your phone now. ") + .cairnWord + Text(" never observed them, so it didn't propagate the local deletion. Trash to clean them up; Keep to add to the exclusion list."))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
@@ -370,7 +402,7 @@ public struct MissedDeletionsSheet: View {
             Button {
                 pendingKeepAll = true
             } label: {
-                Text("Keep all")
+                Text(lang.t("Keep all"))
                     .font(.cairnScaled(size: 14, weight: .semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
@@ -383,7 +415,7 @@ public struct MissedDeletionsSheet: View {
             Button {
                 pendingTrashAll = true
             } label: {
-                Text("Trash all \(count)")
+                Text(lang.f("Trash all %@", "\(count)"))
                     .font(.cairnScaled(size: 14, weight: .semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
@@ -408,7 +440,7 @@ public struct MissedDeletionsSheet: View {
                 Color.black.opacity(0.7)
                     .ignoresSafeArea()
                     .onTapGesture { zoomedAsset = nil }
-                    .accessibilityLabel("Close zoomed thumbnail")
+                    .accessibilityLabel(lang.t("Close zoomed thumbnail"))
                     .accessibilityAddTraits(.isButton)
                 ImmichAssetThumb(
                     assetId: asset.id,
@@ -447,6 +479,7 @@ private struct MissedDeletionRow: View {
     let onDismiss: () -> Void
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -469,24 +502,29 @@ private struct MissedDeletionRow: View {
                     .truncationMode(.middle)
 
                 if let date = asset.fileCreatedAt {
-                    Text(Self.dateFormatter.string(from: date))
+                    Text(formattedDate(date))
                         .font(.cairnScaled(size: 11.5))
                         .foregroundStyle(t.textMuted)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            CairnChip("Skip", accessibilityLabel: "Skip \(asset.originalFileName ?? "")", action: onDismiss)
+            CairnChip(
+                lang.t("Skip"),
+                accessibilityLabel: lang.f("Skip %@", asset.originalFileName ?? ""),
+                action: onDismiss
+            )
         }
         .padding(.vertical, 10)
     }
 
-    private static let dateFormatter: DateFormatter = {
+    private func formattedDate(_ date: Date) -> String {
         let f = DateFormatter()
+        f.locale = lang.locale
         f.dateStyle = .medium
         f.timeStyle = .short
-        return f
-    }()
+        return f.string(from: date)
+    }
 }
 
 #if DEBUG

@@ -99,6 +99,7 @@ public struct RunDetailSheet: View {
     @State private var justExcluded: Int? = nil        // count flash · 2.4s
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // MARK: - Derived
@@ -181,15 +182,17 @@ public struct RunDetailSheet: View {
             // case) from network/unexpected failures. Prior versions
             // hardcoded "Stopped by safety rail" for every aborted run,
             // which was misleading for connectivity-class failures.
-            return abortedClassification.headerTitle
+            return lang.t(abortedClassification.headerTitle)
         }
         if run.status == .restored {
-            let suffix = run.restored == 1 ? "" : "s"
-            return "\(run.restored) asset\(suffix) restored"
+            return run.restored == 1
+                ? lang.f("%@ asset restored", "\(run.restored)")
+                : lang.f("%@ assets restored", "\(run.restored)")
         }
-        if run.dryRun { return "Preview only — nothing touched" }
-        let suffix = run.trashed == 1 ? "" : "s"
-        return "\(run.trashed) asset\(suffix) moved to Trash"
+        if run.dryRun { return lang.t("Preview only — nothing touched") }
+        return run.trashed == 1
+            ? lang.f("%@ asset moved to Trash", "\(run.trashed)")
+            : lang.f("%@ assets moved to Trash", "\(run.trashed)")
     }
 
     /// Classify an aborted run from its `notes` payload (which JournalReader
@@ -276,7 +279,7 @@ public struct RunDetailSheet: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text(runKind.uppercased())
+                Text(lang.t(runKind).uppercased())
                     .font(.cairnScaled(size: 11, weight: .semibold))
                     .tracking(0.9)
                     .foregroundStyle(t.textMuted)
@@ -289,7 +292,7 @@ public struct RunDetailSheet: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Close")
+                .accessibilityLabel(lang.t("Close"))
             }
             .padding(.bottom, 4)
 
@@ -319,6 +322,7 @@ public struct RunDetailSheet: View {
 
     private func formattedHeaderDate(_ d: Date) -> String {
         let f = DateFormatter()
+        f.locale = lang.locale
         f.setLocalizedDateFormatFromTemplate("EEE MMM d h:mm")
         return f.string(from: d)
     }
@@ -327,13 +331,13 @@ public struct RunDetailSheet: View {
         HStack(spacing: 6) {
             MetaChip(label: String(run.id.suffix(8)), tone: .neutral, mono: true)
             if run.tag != nil {
-                MetaChip(label: "breadcrumb set", tone: .verified, icon: "tag")
+                MetaChip(label: lang.t("breadcrumb set"), tone: .verified, icon: "tag")
             }
             if !restored.isEmpty {
-                MetaChip(label: "\(restored.count) restored", tone: .info)
+                MetaChip(label: lang.f("%@ restored", "\(restored.count)"), tone: .info)
             }
             if !excludedLocal.isEmpty {
-                MetaChip(label: "\(excludedLocal.count) excluded", tone: .info)
+                MetaChip(label: lang.f("%@ excluded", "\(excludedLocal.count)"), tone: .info)
             }
             Spacer(minLength: 0)
         }
@@ -349,7 +353,7 @@ public struct RunDetailSheet: View {
         case .safetyRail(let reason):
             Callout(.danger, icon: "exclamationmark.triangle") {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Percent threshold exceeded").fontWeight(.semibold)
+                    Text(lang.t("Percent threshold exceeded")).fontWeight(.semibold)
                     Text(safetyRailMessage(from: reason))
                         .opacity(0.9)
                         .fixedSize(horizontal: false, vertical: true)
@@ -360,8 +364,8 @@ public struct RunDetailSheet: View {
         case .emptyServer:
             Callout(.pending, icon: "exclamationmark.triangle") {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Server returned no assets").fontWeight(.semibold)
-                    Text("cairn refused to act on what looked like a transient API problem. Nothing was touched.")
+                    Text(lang.t("Server returned no assets")).fontWeight(.semibold)
+                    Text(lang.t("cairn refused to act on what looked like a transient API problem. Nothing was touched."))
                         .opacity(0.9)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -371,8 +375,8 @@ public struct RunDetailSheet: View {
         case .emptyLocal:
             Callout(.pending, icon: "exclamationmark.triangle") {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Local library is empty").fontWeight(.semibold)
-                    Text("Photos permission may have been revoked, or the library scan hadn't completed. Nothing was touched.")
+                    Text(lang.t("Local library is empty")).fontWeight(.semibold)
+                    Text(lang.t("Photos permission may have been revoked, or the library scan hadn't completed. Nothing was touched."))
                         .opacity(0.9)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -382,8 +386,8 @@ public struct RunDetailSheet: View {
         case .firstRunNotDryRun:
             Callout(.pending, icon: "exclamationmark.triangle") {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("First run must be a dry-run").fontWeight(.semibold)
-                    Text("cairn requires a preview before the first real trash on a fresh observed store.")
+                    Text(lang.t("First run must be a dry-run")).fontWeight(.semibold)
+                    Text(lang.t("cairn requires a preview before the first real trash on a fresh observed store."))
                         .opacity(0.9)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -393,7 +397,7 @@ public struct RunDetailSheet: View {
         case .unexpected(let reason):
             Callout(.pending, icon: "exclamationmark.triangle") {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Trash didn't finish").fontWeight(.semibold)
+                    Text(lang.t("Trash didn't finish")).fontWeight(.semibold)
                     Text(reason).opacity(0.9)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -415,14 +419,14 @@ public struct RunDetailSheet: View {
                 let afterLimit = reason[limitRange.upperBound...]
                 let limitDigits = afterLimit.prefix(while: { $0.isNumber || $0 == "." })
                 if let limitValue = Double(limitDigits) {
-                    return String(
-                        format: "%.1f%% of matched assets would have moved to Immich's Trash. Your cap is %.1f%%. Nothing was touched.",
+                    return lang.f(
+                        "%.1f%% of matched assets would have moved to Immich's Trash. Your cap is %.1f%%. Nothing was touched.",
                         percentValue, limitValue
                     )
                 }
             }
         }
-        return "The percent safety rail tripped. Nothing was touched."
+        return lang.t("The percent safety rail tripped. Nothing was touched.")
     }
 
     private func justRestoredFlash(count: Int) -> some View {
@@ -430,8 +434,8 @@ public struct RunDetailSheet: View {
         // a callout in the sheet body, not the global toast).
         Callout(.verified, icon: "checkmark.circle") {
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(count) restored").fontWeight(.semibold)
-                Text("Moved out of Immich's Trash, back to your active library.")
+                Text(lang.f("%@ restored", "\(count)")).fontWeight(.semibold)
+                Text(lang.t("Moved out of Immich's Trash, back to your active library."))
                     .opacity(0.85)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -446,10 +450,10 @@ public struct RunDetailSheet: View {
         // in the sheet so it lives alongside the run's other state.
         Callout(.info, icon: "shield") {
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(count) excluded").fontWeight(.semibold)
+                Text(lang.f("%@ excluded", "\(count)")).fontWeight(.semibold)
                 Text(count == 1
-                     ? "Future runs will skip it."
-                     : "Future runs will skip these assets.")
+                     ? lang.t("Future runs will skip it.")
+                     : lang.t("Future runs will skip these assets."))
                     .opacity(0.85)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -469,7 +473,7 @@ public struct RunDetailSheet: View {
                     .foregroundStyle(t.textHint)
                     .accessibilityHidden(true)
                 TextField("", text: $filter, prompt:
-                    Text("Filter by filename…")
+                    Text(lang.t("Filter by filename…"))
                         .font(.cairnScaled(size: 12, design: .monospaced))
                         .foregroundColor(t.textHint)
                 )
@@ -489,7 +493,7 @@ public struct RunDetailSheet: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Clear filter")
+                    .accessibilityLabel(lang.t("Clear filter"))
                 }
             }
             .padding(.horizontal, 10)
@@ -503,7 +507,7 @@ public struct RunDetailSheet: View {
 
             if !selectableAssets.isEmpty {
                 Button(action: toggleSelectAllVisible) {
-                    Text(allVisibleSelected ? "Deselect" : "Select all")
+                    Text(allVisibleSelected ? lang.t("Deselect") : lang.t("Select all"))
                         .font(.cairnScaled(size: 11, weight: .semibold))
                         .foregroundStyle(t.textBody)
                         .padding(.horizontal, 10)
@@ -532,7 +536,7 @@ public struct RunDetailSheet: View {
                     Circle()
                         .fill(t.textMuted)
                         .frame(width: 5, height: 5)
-                    Text("IN TRASH")
+                    Text(lang.t("IN TRASH"))
                         .font(.cairnScaled(size: 11, weight: .semibold))
                         .tracking(0.9)
                         .foregroundStyle(t.textMuted)
@@ -546,12 +550,14 @@ public struct RunDetailSheet: View {
     private var selectionCountLabel: String {
         let base: String
         if filtered.count == assets.count {
-            base = "\(assets.count) assets"
+            base = assets.count == 1
+                ? lang.f("%@ asset", "\(assets.count)")
+                : lang.f("%@ assets", "\(assets.count)")
         } else {
-            base = "\(filtered.count) of \(assets.count) match"
+            base = lang.f("%@ of %@ match", "\(filtered.count)", "\(assets.count)")
         }
         if !selected.isEmpty {
-            return "\(base) · \(selected.count) selected"
+            return lang.f("%@ · %@ selected", base, "\(selected.count)")
         }
         return base
     }
@@ -564,9 +570,9 @@ public struct RunDetailSheet: View {
                 if !assets.isEmpty {
                     assetGrid
                 }
-                sectionLabel("Run metadata")
+                sectionLabel(lang.t("Run metadata"))
                 metadataCard
-                sectionLabel("Server-side breadcrumb")
+                sectionLabel(lang.t("Server-side breadcrumb"))
                 breadcrumbCard
                 Spacer(minLength: 8)
             }
@@ -578,7 +584,7 @@ public struct RunDetailSheet: View {
         CairnCard {
             Group {
                 if filtered.isEmpty {
-                    Text("No filename matches \"\(filter)\".")
+                    Text(lang.f("No filename matches \"%@\".", filter))
                         .font(.cairnScaled(size: 13))
                         .foregroundStyle(t.textMuted)
                         .frame(maxWidth: .infinity)
@@ -615,21 +621,21 @@ public struct RunDetailSheet: View {
     private var metadataCard: some View {
         CairnCard {
             VStack(spacing: 0) {
-                KeyValRow("Run ID", value: String(run.id.suffix(8)), mono: true)
+                KeyValRow(lang.t("Run ID"), value: String(run.id.suffix(8)), mono: true)
                 RowDivider()
-                KeyValRow("Started", value: formattedFullDate(run.startedAt))
+                KeyValRow(lang.t("Started"), value: formattedFullDate(run.startedAt))
                 if run.durationMs > 0 {
                     RowDivider()
-                    KeyValRow("Duration", value: String(format: "%.2fs", Double(run.durationMs) / 1000))
+                    KeyValRow(lang.t("Duration"), value: String(format: "%.2fs", Double(run.durationMs) / 1000))
                 }
                 if let tag = run.tag {
                     RowDivider()
-                    KeyValRow("Breadcrumb",
+                    KeyValRow(lang.t("Breadcrumb"),
                               value: tag.split(separator: "/").last.map(String.init) ?? tag,
                               mono: true)
                 }
                 RowDivider()
-                KeyValRow("Notes", value: run.notes)
+                KeyValRow(lang.t("Notes"), value: run.notes)
             }
         }
         .padding(.bottom, 12)
@@ -638,13 +644,13 @@ public struct RunDetailSheet: View {
     private var breadcrumbCard: some View {
         CairnCard {
             VStack(alignment: .leading, spacing: 6) {
-                Text(run.tag ?? "none — this run did not tag the server")
+                Text(run.tag ?? lang.t("none — this run did not tag the server"))
                     .font(.cairnScaled(size: 12, design: .monospaced))
                     .foregroundStyle(t.textBody)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
                 // from screens/run-detail.jsx — keep verbatim
-                Text("Find these in Immich's Tags view. Assets stay in Trash for 30 days.")
+                Text(lang.t("Find these in Immich's Tags view. Assets stay in Trash for 30 days."))
                     .font(.cairnScaled(size: 12))
                     .foregroundStyle(t.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -657,6 +663,7 @@ public struct RunDetailSheet: View {
 
     private func formattedFullDate(_ d: Date) -> String {
         let f = DateFormatter()
+        f.locale = lang.locale
         f.dateStyle = .medium
         f.timeStyle = .short
         return f.string(from: d)
@@ -684,7 +691,7 @@ public struct RunDetailSheet: View {
         } else if canRestore {
             HStack(spacing: 10) {
                 Button(action: onClose) {
-                    Text("Close")
+                    Text(lang.t("Close"))
                         .font(.cairnScaled(size: 16, weight: .semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
@@ -695,7 +702,7 @@ public struct RunDetailSheet: View {
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
 
-                Text("Select assets to act on them")
+                Text(lang.t("Select assets to act on them"))
                     .font(.cairnScaled(size: 13))
                     .foregroundStyle(t.textMuted)
                     .frame(maxWidth: .infinity, minHeight: 44)
@@ -706,7 +713,7 @@ public struct RunDetailSheet: View {
             .background(footerSurface)
         } else {
             Button(action: onClose) {
-                Text("Close")
+                Text(lang.t("Close"))
                     .font(.cairnScaled(size: 16, weight: .semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
@@ -859,6 +866,7 @@ private struct AssetTile: View {
     let onTap: () -> Void
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
 
     var body: some View {
         Button(action: onTap) {
@@ -925,9 +933,9 @@ private struct AssetTile: View {
     }
 
     private var stateLabel: String {
-        if isRestored { return "Restored, not selectable" }
-        if isExcluded { return isSelected ? "Excluded. Selected." : "Excluded" }
-        return isSelected ? "Selected" : "Not selected"
+        if isRestored { return lang.t("Restored, not selectable") }
+        if isExcluded { return isSelected ? lang.t("Excluded. Selected.") : lang.t("Excluded") }
+        return isSelected ? lang.t("Selected") : lang.t("Not selected")
     }
 
     private var ringColor: Color {
@@ -971,6 +979,7 @@ private struct SelectionActionBar: View {
     let onRestore: () -> Void
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
 
     var body: some View {
         VStack(spacing: 10) {
@@ -991,7 +1000,7 @@ private struct SelectionActionBar: View {
     private var countRow: some View {
         HStack(spacing: 8) {
             // Selection count pill
-            Text("\(selectedCount) selected")
+            Text(lang.f("%@ selected", "\(selectedCount)"))
                 .font(.cairnScaled(size: 12, weight: .semibold))
                 .foregroundStyle(t.primaryInk)
                 .padding(.horizontal, 9)
@@ -1004,7 +1013,9 @@ private struct SelectionActionBar: View {
                 // "+M paired video(s) = total"
                 HStack(spacing: 5) {
                     Circle().fill(t.infoInk).frame(width: 5, height: 5)
-                    Text("+\(pairedCount) paired video\(pairedCount == 1 ? "" : "s") = \(expandedCount)")
+                    Text(pairedCount == 1
+                        ? lang.f("+%@ paired video = %@", "\(pairedCount)", "\(expandedCount)")
+                        : lang.f("+%@ paired videos = %@", "\(pairedCount)", "\(expandedCount)"))
                         .font(.cairnScaled(size: 11, weight: .medium))
                 }
                 .foregroundStyle(t.infoInk)
@@ -1014,7 +1025,7 @@ private struct SelectionActionBar: View {
                 .clipShape(Capsule())
             }
 
-            Button("Clear", action: onClear)
+            Button(lang.t("Clear"), action: onClear)
                 .font(.cairnScaled(size: 12))
                 .foregroundStyle(t.textMuted)
                 .buttonStyle(.plain)
@@ -1032,16 +1043,16 @@ private struct SelectionActionBar: View {
             // subset — the host-side `doExclude` handles the filter.
             ActionButton(
                 icon: allSelectedExcluded ? "shield.slash" : "shield",
-                label: allSelectedExcluded ? "Unexclude" : "Exclude",
+                label: allSelectedExcluded ? lang.t("Unexclude") : lang.t("Exclude"),
                 isPrimary: !canRestore,
                 action: allSelectedExcluded ? onUnexclude : onExclude
             )
-            ActionButton(icon: "link", label: "Open", isPrimary: false, action: onOpen)
-            ActionButton(icon: "doc.on.doc", label: "Copy", isPrimary: false, action: onCopy)
+            ActionButton(icon: "link", label: lang.t("Open"), isPrimary: false, action: onOpen)
+            ActionButton(icon: "doc.on.doc", label: lang.t("Copy"), isPrimary: false, action: onCopy)
             if canRestore {
                 ActionButton(
                     icon: "arrow.uturn.backward",
-                    label: "Restore",
+                    label: lang.t("Restore"),
                     isPrimary: true,
                     action: onRestore
                 )

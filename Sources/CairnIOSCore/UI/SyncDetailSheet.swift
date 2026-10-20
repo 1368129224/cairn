@@ -37,6 +37,8 @@ public struct SyncDetailSheet: View {
     public let onClose: () -> Void
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
+    @Environment(\.locale) private var locale
 
     public init(
         phase: CairnAppModel.SyncPhase,
@@ -68,13 +70,13 @@ public struct SyncDetailSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     currentPhaseCard
-                    KeylineSection("Phase timeline")
+                    KeylineSection(lang.t("Phase timeline"))
                     timelineCard
-                    KeylineSection("Activity")
+                    KeylineSection(lang.t("Activity"))
                     activityCard
                     if isSyncing {
                         Button(action: onCancel) {
-                            Text("Cancel sync")
+                            Text(lang.t("Cancel sync"))
                                 .font(.cairnScaled(size: 14, weight: .medium))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
@@ -101,7 +103,7 @@ public struct SyncDetailSheet: View {
             Spacer().frame(width: 60)
             Spacer()
             VStack(spacing: 1) {
-                Text("Sync detail")
+                Text(lang.t("Sync detail"))
                     .font(.cairnScaled(size: 15, weight: .semibold))
                     .foregroundStyle(t.text)
                 Text(headerSubtitle)
@@ -110,7 +112,7 @@ public struct SyncDetailSheet: View {
                     .monospacedDigit()
             }
             Spacer()
-            Button("Close", action: onClose)
+            Button(lang.t("Close"), action: onClose)
                 .font(.cairnScaled(size: 15))
                 .foregroundStyle(t.textBody)
                 .frame(width: 60, alignment: .trailing)
@@ -126,8 +128,8 @@ public struct SyncDetailSheet: View {
     }
 
     private var headerSubtitle: String {
-        if isSyncing { return "in progress" }
-        if !timeline.isEmpty { return "last sync" }
+        if isSyncing { return lang.t("in progress") }
+        if !timeline.isEmpty { return lang.t("last sync") }
         return "—"
     }
 
@@ -141,7 +143,7 @@ public struct SyncDetailSheet: View {
                         Circle()
                             .fill(isSyncing ? t.pendingInk : t.textHint)
                             .frame(width: 8, height: 8)
-                        Text(phase.displayName)
+                        Text(lang.t(phase.displayName))
                             .font(.cairnScaled(size: 16, weight: .semibold))
                             .foregroundStyle(t.text)
                         Spacer(minLength: 8)
@@ -151,7 +153,7 @@ public struct SyncDetailSheet: View {
                     }
                     if let progress, progress.total > 0, isSyncing && phase == .hashing {
                         progressBar(fraction: min(1.0, Double(progress.hashed) / Double(progress.total)))
-                        Text("\(progress.hashed.formatted(.number)) / \(progress.total.formatted(.number)) hashed")
+                        Text(lang.f("%@ / %@ hashed", progress.hashed.formatted(.number), progress.total.formatted(.number)))
                             .font(.cairnScaled(size: 12, design: .monospaced))
                             .foregroundStyle(t.textMuted)
                     }
@@ -207,7 +209,7 @@ public struct SyncDetailSheet: View {
                 // current hash is fast or stalled on iCloud.
                 HStack(spacing: 8) {
                     if elapsed >= 3 {
-                        Text("Elapsed \(elapsedShort(elapsed))")
+                        Text(lang.f("Elapsed %@", elapsedShort(elapsed)))
                             .font(.cairnScaled(size: 11, design: .monospaced))
                             .foregroundStyle(t.textMuted)
                     } else {
@@ -219,7 +221,7 @@ public struct SyncDetailSheet: View {
                     }
                     if let fraction = item.downloadFraction {
                         Spacer(minLength: 6)
-                        Text("Downloading \(Int(fraction * 100))%")
+                        Text(lang.f("Downloading %@%%", "\(Int(fraction * 100))"))
                             .font(.cairnScaled(size: 11, design: .monospaced))
                             .foregroundStyle(t.textMuted)
                     }
@@ -237,7 +239,7 @@ public struct SyncDetailSheet: View {
                     Image(systemName: "doc")
                         .font(.cairnScaled(size: 11))
                         .foregroundStyle(t.textHint.opacity(0.5))
-                    Text("Idle between hashes…")
+                    Text(lang.t("Idle between hashes…"))
                         .font(.cairnScaled(size: 12, design: .monospaced))
                         .foregroundStyle(t.textMuted)
                     Spacer(minLength: 6)
@@ -358,14 +360,14 @@ public struct SyncDetailSheet: View {
         HStack(spacing: 10) {
             timelineGlyph(for: row)
                 .frame(width: 22)
-            Text(row.phase.displayName)
+            Text(lang.t(row.phase.displayName))
                 .font(.cairnScaled(size: 13))
                 .foregroundStyle(rowTextColor(for: row))
             // Wall-clock start time for the step — quiet, monospaced, so
             // it reads as ambient "when" without competing with the phase
             // name. Absent for skipped/pending phases that never ran.
             if let started = row.startedAt {
-                Text(timeFormat.formatClockTimeWithSeconds(started))
+                Text(timeFormat.formatClockTimeWithSeconds(started, locale: locale))
                     .font(.cairnScaled(size: 11, design: .monospaced))
                     .foregroundStyle(t.textHint)
             }
@@ -412,8 +414,8 @@ public struct SyncDetailSheet: View {
 
     private func rowDurationLabel(for row: TimelineRow) -> String {
         if let ms = row.durationMs { return Self.formatDuration(ms: ms) }
-        if row.isLive { return "live" }
-        if row.isSkipped { return "skipped" }
+        if row.isLive { return lang.t("live") }
+        if row.isSkipped { return lang.t("skipped") }
         return "—"
     }
 
@@ -442,7 +444,7 @@ public struct SyncDetailSheet: View {
         CairnCard {
             VStack(spacing: 0) {
                 if activity.isEmpty {
-                    Text(isSyncing ? "Waiting for activity…" : "No recent activity.")
+                    Text(isSyncing ? lang.t("Waiting for activity…") : lang.t("No recent activity."))
                         .font(.cairnScaled(size: 12))
                         .foregroundStyle(t.textMuted)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -464,7 +466,7 @@ public struct SyncDetailSheet: View {
 
     private func activityRow(_ entry: CairnAppModel.SyncActivity) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(timeFormat.formatClockTimeWithSeconds(entry.timestamp))
+            Text(timeFormat.formatClockTimeWithSeconds(entry.timestamp, locale: locale))
                 .font(.cairnScaled(size: 11, design: .monospaced))
                 .foregroundStyle(t.textHint)
             Text(activityKindLabel(entry.kind))
@@ -484,12 +486,12 @@ public struct SyncDetailSheet: View {
 
     private func activityKindLabel(_ kind: CairnAppModel.SyncActivity.Kind) -> String {
         switch kind {
-        case .phaseStart: "phase"
-        case .hashed:     "hashed"
-        case .fetched:    "fetched"
-        case .stamped:    "stamped"
-        case .note:       "note"
-        case .warning:    "warn"
+        case .phaseStart: lang.t("phase")
+        case .hashed:     lang.t("hashed")
+        case .fetched:    lang.t("fetched")
+        case .stamped:    lang.t("stamped")
+        case .note:       lang.t("note")
+        case .warning:    lang.t("warn")
         }
     }
 

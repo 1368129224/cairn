@@ -27,6 +27,7 @@ public struct ExcludedScreen: View {
     public let onUnexclude: ([String]) -> Void
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
     @State private var pendingClearAll = false
     @State private var pendingRemoval: ExcludedScreenEntry?
 
@@ -58,22 +59,24 @@ public struct ExcludedScreen: View {
         // "Clear all" confirm dialog. The prototype uses window.confirm with
         // copy: "Unexclude all <N> assets? They'll be eligible for future runs again."
         .confirmationDialog(
-            "Unexclude all \(entries.count) \(entries.count == 1 ? "asset" : "assets")?",
+            entries.count == 1
+                ? lang.f("Unexclude %@ asset?", "\(entries.count)")
+                : lang.f("Unexclude all %@ assets?", "\(entries.count)"),
             isPresented: $pendingClearAll,
             titleVisibility: .visible
         ) {
-            Button("Unexclude all", role: .destructive) {
+            Button(lang.t("Unexclude all"), role: .destructive) {
                 onUnexclude(entries.map { $0.filename })
             }
-            Button("Cancel", role: .cancel) {}
+            Button(lang.t("Cancel"), role: .cancel) {}
         } message: {
-            Text("They'll be eligible for future runs again.")
+            Text(lang.t("They'll be eligible for future runs again."))
         }
         // Per-row remove confirm — mirrors the prototype's toast-on-confirm
         // pattern. We don't ship a toast system here; the closure handoff
         // is the seam.
         .confirmationDialog(
-            pendingRemoval.map { "Remove \($0.filename) from excluded list?" } ?? "",
+            pendingRemoval.map { lang.f("Remove %@ from excluded list?", $0.filename) } ?? "",
             isPresented: Binding(
                 get: { pendingRemoval != nil },
                 set: { if !$0 { pendingRemoval = nil } }
@@ -81,13 +84,13 @@ public struct ExcludedScreen: View {
             titleVisibility: .visible
         ) {
             if let entry = pendingRemoval {
-                Button("Remove", role: .destructive) {
+                Button(lang.t("Remove"), role: .destructive) {
                     onUnexclude([entry.filename])
                 }
-                Button("Cancel", role: .cancel) {}
+                Button(lang.t("Cancel"), role: .cancel) {}
             }
         } message: {
-            Text("Future runs can move this to Immich's Trash again.")
+            Text(lang.t("Future runs can move this to Immich's Trash again."))
         }
     }
 
@@ -95,17 +98,19 @@ public struct ExcludedScreen: View {
 
     private var header: some View {
         AppHeader(
-            title: "Excluded",
+            title: lang.t("Excluded"),
             // Subtitle copy verbatim from screens/excluded.jsx.
             subtitle: entries.isEmpty
-                ? "Nothing excluded — every indexed asset is fair game"
-                : "\(entries.count) \(entries.count == 1 ? "asset" : "assets") protected from future runs",
+                ? lang.t("Nothing excluded — every indexed asset is fair game")
+                : (entries.count == 1
+                    ? lang.f("%@ asset protected from future runs", "\(entries.count)")
+                    : lang.f("%@ assets protected from future runs", "\(entries.count)")),
             leading: {
                 Button(action: onBack) {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
                             .font(.cairnScaled(size: 13, weight: .semibold))
-                        Text("Settings")
+                        Text(lang.t("Settings"))
                             .font(.cairnScaled(size: 15))
                     }
                     .foregroundStyle(t.textBody)
@@ -132,19 +137,30 @@ public struct ExcludedScreen: View {
             .padding(.bottom, 14)
 
             // Copy verbatim from screens/excluded.jsx::EmptyState.
-            Text("No assets excluded")
+            Text(lang.t("No assets excluded"))
                 .font(.cairnScaled(size: 17, weight: .semibold))
                 .foregroundStyle(t.text)
                 .padding(.bottom, 6)
 
-            (Text("Open any run, select the assets you want to keep in scope, and tap ")
-                + Text("Exclude").foregroundColor(t.textBody).bold()
-                + Text(". They'll show up here."))
-                .font(.cairnScaled(size: 13))
-                .foregroundStyle(t.textMuted)
-                .multilineTextAlignment(.center)
-                .lineSpacing(2)
-                .frame(maxWidth: 280)
+            if lang.isChinese {
+                (Text("打开任意运行记录，选择需要保留的照片，轻点 ")
+                    + Text("排除").foregroundColor(t.textBody).bold()
+                    + Text("。它们将显示在此处。"))
+                    .font(.cairnScaled(size: 13))
+                    .foregroundStyle(t.textMuted)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(2)
+                    .frame(maxWidth: 280)
+            } else {
+                (Text("Open any run, select the assets you want to keep in scope, and tap ")
+                    + Text("Exclude").foregroundColor(t.textBody).bold()
+                    + Text(". They'll show up here."))
+                    .font(.cairnScaled(size: 13))
+                    .foregroundStyle(t.textMuted)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(2)
+                    .frame(maxWidth: 280)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 40)
@@ -156,8 +172,13 @@ public struct ExcludedScreen: View {
 
     private var explainerCard: some View {
         Callout(.info, icon: "shield") {
-            (Text("Excluded assets stay indexed — ") + .cairnWord + Text(" still knows they exist — but every future reconcile will skip them. Useful for photos you'd rather keep on the server even if they're gone from the phone."))
-                .fixedSize(horizontal: false, vertical: true)
+            if lang.isChinese {
+                (Text("已排除的照片仍会保留索引 — ") + .cairnWord + Text(" 仍知道它们的存在 — 但未来每次比对都会跳过它们。适用于即使从手机中删除、仍希望保留在 Immich 服务器上的照片。"))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                (Text("Excluded assets stay indexed — ") + .cairnWord + Text(" still knows they exist — but every future reconcile will skip them. Useful for photos you'd rather keep on the server even if they're gone from the phone."))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 12)
@@ -166,11 +187,11 @@ public struct ExcludedScreen: View {
     // MARK: - Section header with "Clear all"
 
     private var sectionHeader: some View {
-        KeylineSection("Protected assets") {
+        KeylineSection(lang.t("Protected assets")) {
             Button {
                 pendingClearAll = true
             } label: {
-                Text("Clear all")
+                Text(lang.t("Clear all"))
                     .font(.cairnScaled(size: 11, weight: .semibold))
                     .tracking(0.99)
                     .foregroundStyle(t.textMuted)
@@ -207,6 +228,7 @@ private struct ExcludedRow: View {
     let onRemove: () -> Void
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -233,7 +255,7 @@ private struct ExcludedRow: View {
                     }
                     if let runSuffix = runSuffix {
                         Text("·")
-                        (Text("from run ")
+                        (Text(lang.t("From run "))
                             + Text(runSuffix).font(.cairnScaled(size: 11.5, design: .monospaced)))
                     }
                 }
@@ -244,8 +266,8 @@ private struct ExcludedRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             CairnChip(
-                "Remove",
-                accessibilityLabel: "Remove \(entry.filename) from excluded list",
+                lang.t("Remove"),
+                accessibilityLabel: lang.f("Remove %@ from excluded list", entry.filename),
                 action: onRemove
             )
         }
@@ -255,9 +277,9 @@ private struct ExcludedRow: View {
 
     private var kindLabel: String {
         switch entry.kind {
-        case .photo:    return "photo"
-        case .video:    return "video"
-        case .livePair: return "live-pair"
+        case .photo:    return lang.t("photo")
+        case .video:    return lang.t("video")
+        case .livePair: return lang.t("live-pair")
         }
     }
 

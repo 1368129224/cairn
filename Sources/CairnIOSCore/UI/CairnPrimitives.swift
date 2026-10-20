@@ -845,6 +845,7 @@ public struct HelpPopover<Content: View>: View {
     @State private var showing: Bool = false
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
 
     public init(@ViewBuilder content: () -> Content) {
         self.content = content()
@@ -862,7 +863,7 @@ public struct HelpPopover<Content: View>: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Help")
+        .accessibilityLabel(lang.t("Help"))
         #if canImport(UIKit)
         // Presents via a UIKit bridge (see CairnHelpPopoverBridge) so
         // we can install a custom `UIPopoverBackgroundView` and stroke
@@ -879,6 +880,8 @@ public struct HelpPopover<Content: View>: View {
             ) {
                 helpPopoverContent
                     .environment(\.cairnTokens, t)
+                    .environment(\.cairnLanguage, lang)
+                    .environment(\.locale, lang.locale)
             }
         )
         #else
@@ -1403,6 +1406,7 @@ public struct CairnTabBar: View {
     public let onReselect: ((CairnTab) -> Void)?
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
 
     public init(
         active: Binding<CairnTab>,
@@ -1435,7 +1439,7 @@ public struct CairnTabBar: View {
                             }
                         }
                         .frame(height: 22)
-                        Text(tab.label)
+                        Text(lang.t(tab.label))
                             .font(.cairnScaled(size: 11, weight: .medium))
                     }
                     .foregroundStyle(active.id == tab.id ? t.text : t.textMuted)
@@ -1443,7 +1447,7 @@ public struct CairnTabBar: View {
                     .padding(.vertical, 10)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(tab.label)
+                .accessibilityLabel(lang.t(tab.label))
                 .accessibilityAddTraits(active.id == tab.id ? [.isSelected] : [])
             }
         }
@@ -1770,6 +1774,7 @@ public struct SyncPhaseChecklist: View {
     public let phase: CairnAppModel.SyncPhase
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
 
     public init(phase: CairnAppModel.SyncPhase) {
         self.phase = phase
@@ -1780,7 +1785,7 @@ public struct SyncPhaseChecklist: View {
             Image(systemName: "circle.dotted.circle")
                 .font(.cairnScaled(size: 12))
                 .foregroundStyle(t.pendingInk)
-            Text(phase.displayName)
+            Text(lang.t(phase.displayName))
                 .font(.cairnScaled(size: 12, weight: .medium))
                 .foregroundStyle(t.textBody)
             Spacer(minLength: 0)
@@ -1797,6 +1802,7 @@ public struct ProcessingBreakdown: View {
     public let processed: Int
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
 
     public init(indexed: Int, deferredQueueCount: Int, processed: Int) {
         self.indexed = indexed
@@ -1809,16 +1815,16 @@ public struct ProcessingBreakdown: View {
     public var body: some View {
         if deferredQueueCount > 0 || skipped > 0 {
             HStack(spacing: 4) {
-                Text("\(indexed.formatted(.number)) indexed")
+                Text(lang.f("%@ indexed", indexed.formatted(.number)))
                     .foregroundStyle(t.textBody)
                 if deferredQueueCount > 0 {
                     Text("·").foregroundStyle(t.textHint)
-                    Text("\(deferredQueueCount.formatted(.number)) queued")
+                    Text(lang.f("%@ queued", deferredQueueCount.formatted(.number)))
                         .foregroundStyle(t.textMuted)
                 }
                 if skipped > 0 {
                     Text("·").foregroundStyle(t.textHint)
-                    Text("\(skipped.formatted(.number)) over cap")
+                    Text(lang.f("%@ over cap", skipped.formatted(.number)))
                         .foregroundStyle(t.textMuted)
                 }
             }

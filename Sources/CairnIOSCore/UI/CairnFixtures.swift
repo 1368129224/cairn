@@ -878,19 +878,24 @@ public enum CairnFixtures {
 
 public enum CairnTimeHelpers {
 
-    /// "just now" / "5m ago" / "3h ago" / "2d ago" / "Apr 21".
-    /// Mirrors the prototype's `relTime`. The "now" param is overridable
-    /// so previews and snapshot tests can pin a deterministic clock.
-    public static func relativeTime(_ d: Date, now: Date = Date()) -> String {
+    /// "just now" / "5m ago" / "3h ago" / "2d ago" / "Apr 21" (or localized
+    /// equivalents when `language` resolves to Chinese). Defaults to `.english`
+    /// so previews and unit tests stay deterministic regardless of host locale.
+    public static func relativeTime(
+        _ d: Date,
+        now: Date = Date(),
+        language: AppLanguage = .english
+    ) -> String {
         let diff = Int(now.timeIntervalSince(d))
-        if diff < 60 { return "just now" }
+        if diff < 60 { return language.t("just now") }
         let m = diff / 60
-        if m < 60 { return "\(m)m ago" }
+        if m < 60 { return language.f("%@m ago", "\(m)") }
         let h = m / 60
-        if h < 24 { return "\(h)h ago" }
+        if h < 24 { return language.f("%@h ago", "\(h)") }
         let d2 = h / 24
-        if d2 < 7 { return "\(d2)d ago" }
+        if d2 < 7 { return language.f("%@d ago", "\(d2)") }
         let f = DateFormatter()
+        f.locale = language.locale
         f.setLocalizedDateFormatFromTemplate("MMM d")
         return f.string(from: d)
     }

@@ -62,6 +62,7 @@ public struct PendingReviewScreen: View {
     public let onBulkExcludeOffload: () -> Void
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
     @State private var pendingAction: PendingAction?
     @State private var selectionMode: Bool = false
     /// Selected checksums (base64). Multi-version groups put every
@@ -260,7 +261,7 @@ public struct PendingReviewScreen: View {
                                 zoomedAsset = nil
                             }
                         }
-                        .accessibilityLabel("Close zoomed thumbnail")
+                        .accessibilityLabel(lang.t("Close zoomed thumbnail"))
                         .accessibilityAddTraits(.isButton)
                     VStack(spacing: 12) {
                         ImmichAssetThumb(
@@ -308,14 +309,18 @@ public struct PendingReviewScreen: View {
 
     private var header: some View {
         AppHeader(
-            title: selectionMode ? (selectedChecksums.isEmpty ? "Select items" : "\(selectedChecksums.count) selected") : "Pending review",
+            title: selectionMode
+                ? (selectedChecksums.isEmpty
+                    ? lang.t("Select items")
+                    : lang.f("%@ selected", "\(selectedChecksums.count)"))
+                : lang.t("Pending review"),
             subtitle: selectionMode ? nil : (isEmpty
-                ? "Nothing waiting — every candidate has been handled"
+                ? lang.t("Nothing waiting — every candidate has been handled")
                 : subtitleCopy),
             leading: {
                 if selectionMode {
                     Button(action: exitSelectionMode) {
-                        Text("Cancel")
+                        Text(lang.t("Cancel"))
                             .font(.cairnScaled(size: 15))
                             .foregroundStyle(t.textBody)
                             .padding(.vertical, 4)
@@ -327,7 +332,7 @@ public struct PendingReviewScreen: View {
                         HStack(spacing: 4) {
                             Image(systemName: "chevron.left")
                                 .font(.cairnScaled(size: 13, weight: .semibold))
-                            Text("Status")
+                            Text(lang.t("Status"))
                                 .font(.cairnScaled(size: 15))
                         }
                         .foregroundStyle(t.textBody)
@@ -341,7 +346,7 @@ public struct PendingReviewScreen: View {
                 if !isEmpty {
                     if selectionMode {
                         Button(action: toggleSelectAll) {
-                            Text(allSelected ? "None" : "All")
+                            Text(allSelected ? lang.t("None") : lang.t("All"))
                                 .font(.cairnScaled(size: 13, weight: .semibold))
                                 .tracking(0.66)
                                 .foregroundStyle(t.textBody)
@@ -349,7 +354,7 @@ public struct PendingReviewScreen: View {
                         .buttonStyle(.plain)
                     } else {
                         Button(action: enterSelectionMode) {
-                            Text("Select")
+                            Text(lang.t("Select"))
                                 .font(.cairnScaled(size: 13, weight: .semibold))
                                 .tracking(0.66)
                                 .foregroundStyle(t.textBody)
@@ -446,19 +451,19 @@ public struct PendingReviewScreen: View {
             Divider().background(t.divider)
             HStack(spacing: 10) {
                 bulkChip(
-                    label: "Move \(selectedChecksums.count) to Trash",
+                    label: lang.f("Move %@ to Trash", "\(selectedChecksums.count)"),
                     foreground: t.dangerInk,
                     disabled: selectedChecksums.isEmpty,
                     action: { pendingAction = .bulkApprove(count: selectedChecksums.count) }
                 )
                 bulkChip(
-                    label: "Dismiss \(selectedChecksums.count)",
+                    label: lang.f("Dismiss %@", "\(selectedChecksums.count)"),
                     foreground: t.textBody,
                     disabled: selectedChecksums.isEmpty,
                     action: { pendingAction = .bulkDismiss(count: selectedChecksums.count) }
                 )
                 bulkChip(
-                    label: "Exclude \(selectedChecksums.count)",
+                    label: lang.f("Exclude %@", "\(selectedChecksums.count)"),
                     foreground: t.textBody,
                     disabled: selectedChecksums.isEmpty,
                     action: { pendingAction = .bulkExcludeSelected(count: selectedChecksums.count) }
@@ -492,10 +497,10 @@ public struct PendingReviewScreen: View {
     private var subtitleCopy: String {
         var parts: [String] = []
         if !heldGroups.isEmpty {
-            parts.append("\(heldGroups.count) queued")
+            parts.append(lang.f("%@ queued", "\(heldGroups.count)"))
         }
         if !unconfirmedGroups.isEmpty {
-            parts.append("\(unconfirmedGroups.count) unconfirmed")
+            parts.append(lang.f("%@ unconfirmed", "\(unconfirmedGroups.count)"))
         }
         return parts.joined(separator: " · ")
     }
@@ -507,7 +512,7 @@ public struct PendingReviewScreen: View {
             HStack(spacing: 8) {
                 Image(systemName: "trash")
                     .font(.cairnScaled(size: 14, weight: .semibold))
-                Text("Trash all \(totalVersionCount) now")
+                Text(lang.f("Trash all %@ now", "\(totalVersionCount)"))
                     .font(.cairnScaled(size: 15, weight: .semibold))
             }
             .frame(maxWidth: .infinity)
@@ -535,12 +540,12 @@ public struct PendingReviewScreen: View {
             }
             .padding(.bottom, 14)
 
-            Text("Nothing to review")
+            Text(lang.t("Nothing to review"))
                 .font(.cairnScaled(size: 17, weight: .semibold))
                 .foregroundStyle(t.text)
                 .padding(.bottom, 6)
 
-            Text("Recent deletions are either ready to move to Immich's Trash or still inside the quarantine window. Anything that needs your input will show up here.")
+            Text(lang.t("Recent deletions are either ready to move to Immich's Trash or still inside the quarantine window. Anything that needs your input will show up here."))
                 .font(.cairnScaled(size: 13))
                 .foregroundStyle(t.textMuted)
                 .multilineTextAlignment(.center)
@@ -561,8 +566,13 @@ public struct PendingReviewScreen: View {
     /// here regardless of strictness and tell the user why.
     private var tokenExpiryCallout: some View {
         Callout(.pending, icon: "clock.arrow.circlepath") {
-            (.cairnWord + Text(" was dormant long enough that the system change log expired. We re-indexed your library, but the \(totalVersionCount) candidates below are based on diff-only detection — review them before trashing."))
-                .fixedSize(horizontal: false, vertical: true)
+            if lang.isChinese {
+                (.cairnWord + Text(" 停用时间较长，系统变更日志已过期。我们已重新索引你的照片库，但以下 \(totalVersionCount) 项候选仅来自差异比对 — 移入 Immich Trash 前请先审核。"))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                (.cairnWord + Text(" was dormant long enough that the system change log expired. We re-indexed your library, but the \(totalVersionCount) candidates below are based on diff-only detection — review them before trashing."))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 12)
@@ -585,13 +595,19 @@ public struct PendingReviewScreen: View {
         let noun = n == 1 ? "item" : "items"
         return Callout(.info, icon: "arrow.uturn.backward.circle") {
             VStack(alignment: .leading, spacing: 4) {
-                Text("\(n) restored \(noun) deleted again").fontWeight(.semibold)
-                (Text("You previously restored ") + (n == 1 ? Text("this") : Text("these"))
-                    + Text(" via ") + .cairnWord
-                    + Text(" — they were marked as preserved on Immich. ")
-                    + (n == 1 ? Text("It's") : Text("They're"))
-                    + Text(" now deleted on this iPhone again. Approving will clear the exclusion and trash on Immich; excluding re-affirms the original preserve."))
-                    .opacity(0.88).fixedSize(horizontal: false, vertical: true)
+                if lang.isChinese {
+                    Text(lang.f("%@ restored items deleted again", "\(n)")).fontWeight(.semibold)
+                    (Text("你之前通过 ") + .cairnWord + Text(" 恢复过\(n == 1 ? "这张照片" : "这些照片")，它们在 Immich 上被标记为保留。现在\(n == 1 ? "它" : "它们")又在 iPhone 上被删除了。批准将清除排除并移入 Immich Trash；排除则重新确认原有的保留意图。"))
+                        .opacity(0.88).fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text("\(n) restored \(noun) deleted again").fontWeight(.semibold)
+                    (Text("You previously restored ") + (n == 1 ? Text("this") : Text("these"))
+                        + Text(" via ") + .cairnWord
+                        + Text(" — they were marked as preserved on Immich. ")
+                        + (n == 1 ? Text("It's") : Text("They're"))
+                        + Text(" now deleted on this iPhone again. Approving will clear the exclusion and trash on Immich; excluding re-affirms the original preserve."))
+                        .opacity(0.88).fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .padding(.horizontal, 16)
@@ -604,9 +620,14 @@ public struct PendingReviewScreen: View {
     private var massOffloadCallout: some View {
         Callout(.pending, icon: "arrow.down.circle") {
             VStack(alignment: .leading, spacing: 10) {
-                (Text("Detected \(massOffloadCount) deletions in a recent scan — that's a lot at once. If you were intentionally offloading photos to free up space, exclude them now so ") + .cairnWord + Text(" stops flagging them."))
-                    .fixedSize(horizontal: false, vertical: true)
-                CairnChip("Bulk exclude \(massOffloadCount)") {
+                if lang.isChinese {
+                    (Text("最近一次扫描检测到 \(massOffloadCount) 项删除 — 单次数量较大。如果你是有意清理手机空间来释放存储，请立即排除它们，让 ") + .cairnWord + Text(" 停止标记。"))
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    (Text("Detected \(massOffloadCount) deletions in a recent scan — that's a lot at once. If you were intentionally offloading photos to free up space, exclude them now so ") + .cairnWord + Text(" stops flagging them."))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                CairnChip(lang.f("Bulk exclude %@", "\(massOffloadCount)")) {
                     pendingAction = .bulkOffload(count: massOffloadCount)
                 }
             }
@@ -629,7 +650,7 @@ public struct PendingReviewScreen: View {
         if !groups.isEmpty {
             let isSelected = isSectionFullySelected(groups)
             Button(action: { toggleSectionSelection(groups) }) {
-                Text(isSelected ? "Deselect all" : "Select all")
+                Text(isSelected ? lang.t("Deselect all") : lang.t("Select all"))
                     .font(.cairnScaled(size: 11, weight: .semibold))
                     .tracking(0.4)
                     .foregroundStyle(t.accent)
@@ -640,7 +661,7 @@ public struct PendingReviewScreen: View {
 
     private var heldSection: some View {
         Group {
-            KeylineSection("Queued") {
+            KeylineSection(lang.t("Queued")) {
                 HStack(spacing: 12) {
                     sectionSelectAllButton(for: heldGroups)
                     Text("\(heldGroups.count)")
@@ -681,7 +702,7 @@ public struct PendingReviewScreen: View {
 
     private var unconfirmedSection: some View {
         Group {
-            KeylineSection("Unconfirmed") {
+            KeylineSection(lang.t("Unconfirmed")) {
                 HStack(spacing: 12) {
                     sectionSelectAllButton(for: unconfirmedGroups)
                     Text("\(unconfirmedGroups.count)")
@@ -692,8 +713,13 @@ public struct PendingReviewScreen: View {
                 }
             }
             Callout(.info, icon: "questionmark.circle") {
-                (Text("These weren't caught by the deletion log — they may have left your library before ") + .cairnWord + Text(" was watching. Review each one before trashing."))
-                    .fixedSize(horizontal: false, vertical: true)
+                if lang.isChinese {
+                    (Text("这些照片并非由删除日志捕获 — 它们可能在 ") + .cairnWord + Text(" 开始监控之前就已离开照片库。移入 Immich Trash 前请逐条审核。"))
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    (Text("These weren't caught by the deletion log — they may have left your library before ") + .cairnWord + Text(" was watching. Review each one before trashing."))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
@@ -855,9 +881,9 @@ public struct PendingReviewScreen: View {
     private func formatCountdown(_ confirmedAt: Date) -> String {
         let eligibleAt = confirmedAt.addingTimeInterval(TimeInterval(quarantineDays) * 86_400)
         let remaining = eligibleAt.timeIntervalSinceNow
-        if remaining <= 0 { return "Ready to trash" }
+        if remaining <= 0 { return lang.t("Ready to trash") }
         let days = Int((remaining / 86_400).rounded(.up))
-        return days == 1 ? "Trashes in 1 day" : "Trashes in \(days) days"
+        return days == 1 ? lang.t("Trashes in 1 day") : lang.f("Trashes in %@ days", "\(days)")
     }
 
     // MARK: - Version labels
@@ -879,14 +905,15 @@ public struct PendingReviewScreen: View {
     /// "Retired …" label so we don't double-render "Retired Apr 21".
     private func formatRelative(_ d: Date) -> String {
         let diff = Int(Date().timeIntervalSince(d))
-        if diff < 60 { return "just now" }
+        if diff < 60 { return lang.t("just now") }
         let m = diff / 60
-        if m < 60 { return "\(m)m ago" }
+        if m < 60 { return lang.f("%@m ago", "\(m)") }
         let h = m / 60
-        if h < 24 { return "\(h)h ago" }
+        if h < 24 { return lang.f("%@h ago", "\(h)") }
         let days = h / 24
-        if days < 30 { return "\(days)d ago" }
+        if days < 30 { return lang.f("%@d ago", "\(days)") }
         let f = DateFormatter()
+        f.locale = lang.locale
         f.setLocalizedDateFormatFromTemplate("MMM d")
         return f.string(from: d)
     }
@@ -895,21 +922,44 @@ public struct PendingReviewScreen: View {
 
     private var confirmationTitle: String {
         switch pendingAction {
-        case .approveGroup(let g): return "Move \(groupNoun(g)) to Trash now?"
-        case .excludeGroup(let g): return "Exclude \(groupNoun(g)) from future runs?"
-        case .dismissGroup(let g): return "Dismiss \(groupNoun(g))?"
-        case .approveVersion(_, let l): return "Move \(l) version to Trash now?"
-        case .excludeVersion(_, let l): return "Exclude \(l) version from future runs?"
-        case .dismissVersion(_, let l): return "Dismiss \(l) version?"
-        case .approveBatch(_, let n, _): return "Move all \(n) photos to Trash now?"
-        case .excludeBatch(_, let n, _): return "Exclude all \(n) photos from future runs?"
-        case .dismissBatch(_, let n, _): return "Dismiss all \(n) photos?"
-        case .bulkOffload(let n): return "Exclude all \(n) recent deletions?"
-        case .bulkApprove(let n): return "Move \(n) selected item\(n == 1 ? "" : "s") to Trash now?"
-        case .bulkExcludeSelected(let n): return "Exclude \(n) selected item\(n == 1 ? "" : "s")?"
-        case .bulkDismiss(let n): return "Dismiss \(n) selected item\(n == 1 ? "" : "s")?"
-        case .trashAll(let n): return "Move all \(n) item\(n == 1 ? "" : "s") to Trash now?"
-        case .none:              return ""
+        case .approveGroup(let g):
+            return lang.f("Move %@ to Trash now?", groupNoun(g))
+        case .excludeGroup(let g):
+            return lang.f("Exclude %@ from future runs?", groupNoun(g))
+        case .dismissGroup(let g):
+            return lang.f("Dismiss %@?", groupNoun(g))
+        case .approveVersion(_, let l):
+            return lang.f("Move %@ version to Trash now?", l)
+        case .excludeVersion(_, let l):
+            return lang.f("Exclude %@ version from future runs?", l)
+        case .dismissVersion(_, let l):
+            return lang.f("Dismiss %@ version?", l)
+        case .approveBatch(_, let n, _):
+            return lang.f("Move all %@ photos to Trash now?", "\(n)")
+        case .excludeBatch(_, let n, _):
+            return lang.f("Exclude all %@ photos from future runs?", "\(n)")
+        case .dismissBatch(_, let n, _):
+            return lang.f("Dismiss all %@ photos?", "\(n)")
+        case .bulkOffload(let n):
+            return lang.f("Exclude all %@ recent deletions?", "\(n)")
+        case .bulkApprove(let n):
+            return n == 1
+                ? lang.f("Move %@ selected item to Trash now?", "\(n)")
+                : lang.f("Move %@ selected items to Trash now?", "\(n)")
+        case .bulkExcludeSelected(let n):
+            return n == 1
+                ? lang.f("Exclude %@ selected item?", "\(n)")
+                : lang.f("Exclude %@ selected items?", "\(n)")
+        case .bulkDismiss(let n):
+            return n == 1
+                ? lang.f("Dismiss %@ selected item?", "\(n)")
+                : lang.f("Dismiss %@ selected items?", "\(n)")
+        case .trashAll(let n):
+            return n == 1
+                ? lang.f("Move all %@ item to Trash now?", "\(n)")
+                : lang.f("Move all %@ items to Trash now?", "\(n)")
+        case .none:
+            return ""
         }
     }
 
@@ -920,9 +970,9 @@ public struct PendingReviewScreen: View {
         // already encode the name in the key.
         let name = group.versions.first?.originalFileName
             ?? group.key.fallbackFilename
-            ?? "this photo"
+            ?? lang.t("this photo")
         if group.versions.count > 1 {
-            return "\(name) (\(group.versions.count) versions)"
+            return lang.f("%@ (%@ versions)", name, "\(group.versions.count)")
         }
         return name
     }
@@ -931,41 +981,45 @@ public struct PendingReviewScreen: View {
         switch pendingAction {
         case .approveGroup(let g):
             if g.versions.count > 1 {
-                return Text("Skips the quarantine wait for every version. Immich keeps them in Trash for 30 days.")
+                return Text(lang.t("Skips the quarantine wait for every version. Immich keeps them in Trash for 30 days."))
             }
-            return Text("Skips the quarantine wait. Immich keeps it in Trash for 30 days.")
+            return Text(lang.t("Skips the quarantine wait. Immich keeps it in Trash for 30 days."))
         case .excludeGroup(let g):
             if g.versions.count > 1 {
-                return Text("Future runs will skip every version. You can unexclude later from Settings.")
+                return Text(lang.t("Future runs will skip every version. You can unexclude later from Settings."))
             }
-            return Text("Future runs will skip this one. You can unexclude later from Settings.")
+            return Text(lang.t("Future runs will skip this one. You can unexclude later from Settings."))
         case .dismissGroup(let g):
             if g.versions.count > 1 {
-                return Text("Removes every version from the pending list. If you delete the same photo again, they will reappear.")
+                return Text(lang.t("Removes every version from the pending list. If you delete the same photo again, they will reappear."))
             }
-            return Text("Removes it from the pending list. If you delete the same photo again, it will reappear.")
+            return Text(lang.t("Removes it from the pending list. If you delete the same photo again, it will reappear."))
         case .approveVersion:
-            return Text("Skips the quarantine wait for this version only. Immich keeps it in Trash for 30 days.")
+            return Text(lang.t("Skips the quarantine wait for this version only. Immich keeps it in Trash for 30 days."))
         case .excludeVersion:
-            return Text("Future runs will skip this version. The other versions in this group are unaffected.")
+            return Text(lang.t("Future runs will skip this version. The other versions in this group are unaffected."))
         case .dismissVersion:
-            return Text("Removes this version from the pending list. Other versions in the group remain.")
+            return Text(lang.t("Removes this version from the pending list. Other versions in the group remain."))
         case .approveBatch(_, let n, _):
-            return Text("Skips the quarantine wait for all \(n) photos in this batch. Immich keeps them in Trash for 30 days.")
+            return Text(lang.f("Skips the quarantine wait for all %@ photos in this batch. Immich keeps them in Trash for 30 days.", "\(n)"))
         case .excludeBatch(_, let n, _):
-            return Text("Future runs will skip all \(n). You can unexclude later from Settings.")
+            return Text(lang.f("Future runs will skip all %@. You can unexclude later from Settings.", "\(n)"))
         case .dismissBatch(_, let n, _):
-            return Text("Removes all \(n) from the pending list. If you delete the same photos again, they will reappear.")
+            return Text(lang.f("Removes all %@ from the pending list. If you delete the same photos again, they will reappear.", "\(n)"))
         case .bulkOffload:
-            return Text("All \(massOffloadCount) recent deletions will move to the excluded list. ") + .cairnWord + Text(" will stop considering them.")
+            if lang.isChinese {
+                return Text("近期删除的全部 \(massOffloadCount) 项都将移入排除列表。") + .cairnWord + Text(" 将不再处理它们。")
+            } else {
+                return Text("All \(massOffloadCount) recent deletions will move to the excluded list. ") + .cairnWord + Text(" will stop considering them.")
+            }
         case .bulkApprove:
-            return Text("Skips the quarantine wait for every selected item. Immich keeps them in Trash for 30 days.")
+            return Text(lang.t("Skips the quarantine wait for every selected item. Immich keeps them in Trash for 30 days."))
         case .bulkExcludeSelected:
-            return Text("Future runs will skip every selected item. You can unexclude later from Settings.")
+            return Text(lang.t("Future runs will skip every selected item. You can unexclude later from Settings."))
         case .bulkDismiss:
-            return Text("Removes selected items from the pending list. If you delete them again, they will reappear.")
+            return Text(lang.t("Removes selected items from the pending list. If you delete them again, they will reappear."))
         case .trashAll:
-            return Text("Skips the quarantine wait for every item. Immich keeps them in Trash for 30 days.")
+            return Text(lang.t("Skips the quarantine wait for every item. Immich keeps them in Trash for 30 days."))
         case .none:
             return Text("")
         }
@@ -975,64 +1029,64 @@ public struct PendingReviewScreen: View {
     private var confirmationButtons: some View {
         switch pendingAction {
         case .approveGroup(let g):
-            Button("Move to Trash", role: .destructive) {
+            Button(lang.t("Move to Trash"), role: .destructive) {
                 onApprove(g.versions.map(\.checksum.base64))
             }
-            Button("Cancel", role: .cancel) {}
+            Button(lang.t("Cancel"), role: .cancel) {}
         case .excludeGroup(let g):
-            Button("Exclude", role: .destructive) {
+            Button(lang.t("Exclude"), role: .destructive) {
                 onExclude(g.versions.map(\.checksum.base64))
             }
-            Button("Cancel", role: .cancel) {}
+            Button(lang.t("Cancel"), role: .cancel) {}
         case .dismissGroup(let g):
-            Button("Dismiss") {
+            Button(lang.t("Dismiss")) {
                 onDismiss(g.versions.map(\.checksum.base64))
             }
-            Button("Cancel", role: .cancel) {}
+            Button(lang.t("Cancel"), role: .cancel) {}
         case .approveVersion(let c, _):
-            Button("Move to Trash", role: .destructive) { onApprove([c]) }
-            Button("Cancel", role: .cancel) {}
+            Button(lang.t("Move to Trash"), role: .destructive) { onApprove([c]) }
+            Button(lang.t("Cancel"), role: .cancel) {}
         case .excludeVersion(let c, _):
-            Button("Exclude", role: .destructive) { onExclude([c]) }
-            Button("Cancel", role: .cancel) {}
+            Button(lang.t("Exclude"), role: .destructive) { onExclude([c]) }
+            Button(lang.t("Cancel"), role: .cancel) {}
         case .dismissVersion(let c, _):
-            Button("Dismiss") { onDismiss([c]) }
-            Button("Cancel", role: .cancel) {}
+            Button(lang.t("Dismiss")) { onDismiss([c]) }
+            Button(lang.t("Cancel"), role: .cancel) {}
         case .approveBatch(_, _, let checksums):
-            Button("Move to Trash", role: .destructive) { onApprove(checksums) }
-            Button("Cancel", role: .cancel) {}
+            Button(lang.t("Move to Trash"), role: .destructive) { onApprove(checksums) }
+            Button(lang.t("Cancel"), role: .cancel) {}
         case .excludeBatch(_, _, let checksums):
-            Button("Exclude", role: .destructive) { onExclude(checksums) }
-            Button("Cancel", role: .cancel) {}
+            Button(lang.t("Exclude"), role: .destructive) { onExclude(checksums) }
+            Button(lang.t("Cancel"), role: .cancel) {}
         case .dismissBatch(_, _, let checksums):
-            Button("Dismiss") { onDismiss(checksums) }
-            Button("Cancel", role: .cancel) {}
+            Button(lang.t("Dismiss")) { onDismiss(checksums) }
+            Button(lang.t("Cancel"), role: .cancel) {}
         case .bulkOffload:
-            Button("Exclude all", role: .destructive) { onBulkExcludeOffload() }
-            Button("Cancel", role: .cancel) {}
+            Button(lang.t("Exclude all"), role: .destructive) { onBulkExcludeOffload() }
+            Button(lang.t("Cancel"), role: .cancel) {}
         case .bulkApprove:
-            Button("Move selected to Trash", role: .destructive) {
+            Button(lang.t("Move selected to Trash"), role: .destructive) {
                 onApprove(Array(selectedChecksums))
                 exitSelectionMode()
             }
-            Button("Cancel", role: .cancel) {}
+            Button(lang.t("Cancel"), role: .cancel) {}
         case .bulkExcludeSelected:
-            Button("Exclude selected", role: .destructive) {
+            Button(lang.t("Exclude selected"), role: .destructive) {
                 onExclude(Array(selectedChecksums))
                 exitSelectionMode()
             }
-            Button("Cancel", role: .cancel) {}
+            Button(lang.t("Cancel"), role: .cancel) {}
         case .bulkDismiss:
-            Button("Dismiss selected") {
+            Button(lang.t("Dismiss selected")) {
                 onDismiss(Array(selectedChecksums))
                 exitSelectionMode()
             }
-            Button("Cancel", role: .cancel) {}
+            Button(lang.t("Cancel"), role: .cancel) {}
         case .trashAll:
-            Button("Move all to Trash", role: .destructive) {
+            Button(lang.t("Move all to Trash"), role: .destructive) {
                 onApprove(allChecksums)
             }
-            Button("Cancel", role: .cancel) {}
+            Button(lang.t("Cancel"), role: .cancel) {}
         case .none:
             EmptyView()
         }
@@ -1265,10 +1319,10 @@ private enum VersionLabel: Equatable {
     /// ("3d ago", "just now", "Apr 21").
     case retired(String)
 
-    var text: String {
+    func text(in language: AppLanguage) -> String {
         switch self {
-        case .original: return "Original"
-        case .retired(let when): return "Retired \(when)"
+        case .original: return language.t("Original")
+        case .retired(let when): return language.f("Retired %@", when)
         }
     }
 }
@@ -1294,6 +1348,7 @@ private struct PendingReviewGroupRow: View {
     let onTapThumb: (ServerAsset) -> Void
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
 
     var body: some View {
         // Pick the first version (post-sort: anchored or oldest-retired)
@@ -1318,7 +1373,7 @@ private struct PendingReviewGroupRow: View {
                 )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("View larger thumbnail of \(displayName)")
+            .accessibilityLabel(lang.f("View larger thumbnail of %@", displayName))
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -1354,19 +1409,19 @@ private struct PendingReviewGroupRow: View {
                         RowIconButton(
                             systemName: "trash",
                             tone: .danger,
-                            accessibilityLabel: "Move all \(group.versions.count) versions of \(displayName) to Trash",
+                            accessibilityLabel: lang.f("Move all %@ versions of %@ to Trash", "\(group.versions.count)", displayName),
                             action: onApprove
                         )
                         RowIconButton(
                             systemName: "xmark.circle",
                             tone: .neutral,
-                            accessibilityLabel: "Dismiss all \(group.versions.count) versions of \(displayName)",
+                            accessibilityLabel: lang.f("Dismiss all %@ versions of %@", "\(group.versions.count)", displayName),
                             action: onDismiss
                         )
                         RowIconButton(
                             systemName: "shield",
                             tone: .neutral,
-                            accessibilityLabel: "Exclude all \(group.versions.count) versions of \(displayName)",
+                            accessibilityLabel: lang.f("Exclude all %@ versions of %@", "\(group.versions.count)", displayName),
                             action: onExclude
                         )
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
@@ -1379,19 +1434,19 @@ private struct PendingReviewGroupRow: View {
                         RowIconButton(
                             systemName: "trash",
                             tone: .danger,
-                            accessibilityLabel: "Move \(displayName) to Trash",
+                            accessibilityLabel: lang.f("Move %@ to Trash", displayName),
                             action: onApprove
                         )
                         RowIconButton(
                             systemName: "xmark.circle",
                             tone: .neutral,
-                            accessibilityLabel: "Dismiss \(displayName)",
+                            accessibilityLabel: lang.f("Dismiss %@", displayName),
                             action: onDismiss
                         )
                         RowIconButton(
                             systemName: "shield",
                             tone: .neutral,
-                            accessibilityLabel: "Exclude \(displayName)",
+                            accessibilityLabel: lang.f("Exclude %@", displayName),
                             action: onExclude
                         )
                     }
@@ -1415,7 +1470,7 @@ private struct PendingReviewGroupRow: View {
     }
 
     private var versionsPill: some View {
-        Text("\(group.versions.count) versions")
+        Text(lang.f("%@ versions", "\(group.versions.count)"))
             .font(.cairnScaled(size: 10, weight: .semibold))
             .tracking(0.55)
             .foregroundStyle(t.textBody)
@@ -1441,16 +1496,16 @@ private struct PendingReviewGroupRow: View {
                     .foregroundStyle(.white)
             }
         }
-        .accessibilityLabel(isSelected ? "Selected" : "Not selected")
+        .accessibilityLabel(isSelected ? lang.t("Selected") : lang.t("Not selected"))
     }
 
     private func kindLabel(for asset: ServerAsset?) -> String {
-        guard let asset else { return "asset" }
+        guard let asset else { return lang.t("asset") }
         let name = asset.originalFileName ?? ""
         let ext = (name as NSString).pathExtension.lowercased()
         let isVideo = ["mov", "mp4", "m4v", "avi", "3gp"].contains(ext)
-        if asset.livePhotoVideoId != nil { return "live-pair" }
-        return isVideo ? "video" : "photo"
+        if asset.livePhotoVideoId != nil { return lang.t("live-pair") }
+        return isVideo ? lang.t("video") : lang.t("photo")
     }
 }
 
@@ -1474,6 +1529,7 @@ private struct BatchRow: View {
     let onDismiss: () -> Void
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
 
     var body: some View {
         // Two rows: identity + countdown + expand on top (so "N photos"
@@ -1487,7 +1543,7 @@ private struct BatchRow: View {
                 }
                 stackedThumb
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(count) photos")
+                    Text(lang.f("%@ photos", "\(count)"))
                         .font(.cairnScaled(size: 13, weight: .semibold))
                         .foregroundStyle(t.text)
                         .lineLimit(1)
@@ -1508,7 +1564,7 @@ private struct BatchRow: View {
             }
             if !selectionMode {
                 HStack(spacing: 8) {
-                    Text("Deleted together")
+                    Text(lang.t("Deleted together"))
                         .font(.cairnScaled(size: 11.5))
                         .foregroundStyle(t.textHint)
                         .lineLimit(1)
@@ -1516,19 +1572,19 @@ private struct BatchRow: View {
                     RowIconButton(
                         systemName: "trash",
                         tone: .danger,
-                        accessibilityLabel: "Move all \(count) photos in this batch to Trash",
+                        accessibilityLabel: lang.f("Move all %@ photos in this batch to Trash", "\(count)"),
                         action: onApprove
                     )
                     RowIconButton(
                         systemName: "xmark.circle",
                         tone: .neutral,
-                        accessibilityLabel: "Dismiss all \(count) photos in this batch",
+                        accessibilityLabel: lang.f("Dismiss all %@ photos in this batch", "\(count)"),
                         action: onDismiss
                     )
                     RowIconButton(
                         systemName: "shield",
                         tone: .neutral,
-                        accessibilityLabel: "Exclude all \(count) photos in this batch",
+                        accessibilityLabel: lang.f("Exclude all %@ photos in this batch", "\(count)"),
                         action: onExclude
                     )
                 }
@@ -1541,7 +1597,7 @@ private struct BatchRow: View {
             if selectionMode { onToggleSelect() } else { onToggleExpand() }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(count) photos deleted together, \(countdown ?? "")")
+        .accessibilityLabel(lang.f("%@ photos deleted together, %@", "\(count)", countdown ?? ""))
     }
 
     /// Representative thumbnail with a "stack" hint behind it and a count
@@ -1582,7 +1638,7 @@ private struct BatchRow: View {
                     .foregroundStyle(.white)
             }
         }
-        .accessibilityLabel(isSelected ? "Selected" : "Not selected")
+        .accessibilityLabel(isSelected ? lang.t("Selected") : lang.t("Not selected"))
     }
 }
 
@@ -1601,6 +1657,7 @@ private struct PendingReviewVersionRow: View {
     let onTapThumb: (ServerAsset) -> Void
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
 
     var body: some View {
         let displayName = asset.originalFileName ?? "asset-\(asset.id.prefix(8))"
@@ -1621,7 +1678,7 @@ private struct PendingReviewVersionRow: View {
                 )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("View larger thumbnail of \(displayName)")
+            .accessibilityLabel(lang.f("View larger thumbnail of %@", displayName))
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -1646,19 +1703,19 @@ private struct PendingReviewVersionRow: View {
                     RowIconButton(
                         systemName: "trash",
                         tone: .danger,
-                        accessibilityLabel: "Move this version to Trash",
+                        accessibilityLabel: lang.t("Move this version to Trash"),
                         action: onApprove
                     )
                     RowIconButton(
                         systemName: "xmark.circle",
                         tone: .neutral,
-                        accessibilityLabel: "Dismiss this version",
+                        accessibilityLabel: lang.t("Dismiss this version"),
                         action: onDismiss
                     )
                     RowIconButton(
                         systemName: "shield",
                         tone: .neutral,
-                        accessibilityLabel: "Exclude this version",
+                        accessibilityLabel: lang.t("Exclude this version"),
                         action: onExclude
                     )
                 }
@@ -1694,7 +1751,7 @@ private struct PendingReviewVersionRow: View {
             case .retired:  return t.bg
             }
         }()
-        Text(label.text)
+        Text(label.text(in: lang))
             .font(.cairnScaled(size: 10, weight: .semibold))
             .tracking(0.55)
             .foregroundStyle(tone)
@@ -1720,7 +1777,7 @@ private struct PendingReviewVersionRow: View {
                     .foregroundStyle(.white)
             }
         }
-        .accessibilityLabel(isSelected ? "Selected" : "Not selected")
+        .accessibilityLabel(isSelected ? lang.t("Selected") : lang.t("Not selected"))
     }
 }
 

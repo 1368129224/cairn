@@ -64,6 +64,8 @@ public struct CairnAppRoot: View {
         self.palette = palette
     }
 
+    private var lang: AppLanguage { model.settings.appLanguage }
+
     public var body: some View {
         bodyContent
             #if canImport(UIKit)
@@ -78,14 +80,14 @@ public struct CairnAppRoot: View {
             }
             #endif
             .alert(
-                "Import complete",
+                lang.t("Import complete"),
                 isPresented: Binding(
                     get: { importResult != nil },
                     set: { if !$0 { importResult = nil } }
                 ),
                 presenting: importResult
             ) { _ in
-                Button("OK", role: .cancel) { importResult = nil }
+                Button(lang.t("OK"), role: .cancel) { importResult = nil }
             } message: { result in
                 Text(importResultMessage(for: result))
             }
@@ -162,10 +164,12 @@ public struct CairnAppRoot: View {
         // (follow system).
         .preferredColorScheme(appearanceOverrideScheme(model.settings.appearance))
         .cairnTheme(palette)
-        // Flow the user's clock-format pick into the environment so
-        // any view that renders a time (RunsScreen rows, journal tail
-        // — via refresh — etc.) reads from a single source.
+        // Flow the user's clock-format and language picks into the environment
+        // so any view that renders localized copy or times reads from a single
+        // reactive source without tearing down navigation state.
         .environment(\.cairnTimeFormat, model.settings.timeDisplayFormat)
+        .environment(\.cairnLanguage, lang)
+        .environment(\.locale, lang.locale)
         .animation(reduceMotion ? .none : .snappy(duration: 0.18), value: model.needsOnboarding)
         .animation(reduceMotion ? .none : .snappy(duration: 0.18), value: model.hasCompletedInitialScan)
         .animation(reduceMotion ? .none : .snappy(duration: 0.18), value: model.settingsRoute)
@@ -174,6 +178,8 @@ public struct CairnAppRoot: View {
             set: { model.presentedSheet = $0 }
         )) { sheet in
             sheetContent(for: sheet)
+                .environment(\.cairnLanguage, lang)
+                .environment(\.locale, lang.locale)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
@@ -182,14 +188,14 @@ public struct CairnAppRoot: View {
         // permission denied, API key rejected, network down) and the user
         // would see a "tap does nothing" interaction with no feedback.
         .alert(
-            "Couldn't finish",
+            lang.t("Couldn't finish"),
             isPresented: Binding(
                 get: { model.lastError != nil },
                 set: { if !$0 { model.lastError = nil } }
             ),
             presenting: model.lastError
         ) { _ in
-            Button("OK", role: .cancel) { model.lastError = nil }
+            Button(lang.t("OK"), role: .cancel) { model.lastError = nil }
         } message: { message in
             Text(message)
         }
@@ -216,7 +222,7 @@ public struct CairnAppRoot: View {
                     let url = try await LogExporter.export()
                     exportedFileURL = url
                 } catch {
-                    model.lastError = "Couldn't export logs: \(error.localizedDescription)"
+                    model.lastError = lang.f("Couldn't export logs: %@", error.localizedDescription)
                 }
             }
             #endif
@@ -225,22 +231,38 @@ public struct CairnAppRoot: View {
 
     private func importResultMessage(for result: CairnImportResult) -> String {
         var parts: [String] = []
-        parts.append("\(result.serverCount) server\(result.serverCount == 1 ? "" : "s") processed.")
-        parts.append("\(result.observedAdded) checksums added, \(result.exclusionsAdded) exclusions added, \(result.journalLinesAppended) journal lines appended.")
+        parts.append(
+            result.serverCount == 1
+                ? lang.f("%@ server processed.", "\(result.serverCount)")
+                : lang.f("%@ servers processed.", "\(result.serverCount)")
+        )
+        parts.append(
+            lang.f(
+                "%@ checksums added, %@ exclusions added, %@ journal lines appended.",
+                "\(result.observedAdded)",
+                "\(result.exclusionsAdded)",
+                "\(result.journalLinesAppended)"
+            )
+        )
         if result.settingsApplied {
-            parts.append("Settings applied.")
+            parts.append(lang.t("Settings applied."))
         }
         switch result.hashCacheSkippedReason {
         case .deviceMismatch:
-            parts.append("Hash cache skipped — backup came from a different device (or this iPhone was restored from backup since the export). Photos will re-hash on the next sync.")
+            parts.append(lang.t("Hash cache skipped — backup came from a different device (or this iPhone was restored from backup since the export). Photos will re-hash on the next sync."))
         case .missingIDFV:
-            parts.append("Hash cache skipped — backup didn't include a device fingerprint, so cairn can't tell if it's safe to restore. Photos will re-hash on the next sync.")
+            parts.append(lang.t("Hash cache skipped — backup didn't include a device fingerprint, so cairn can't tell if it's safe to restore. Photos will re-hash on the next sync."))
         case nil:
             if result.hashCacheImported > 0 {
-                parts.append("Hash cache restored — \(result.hashCacheImported.formatted(.number)) rows imported, no re-hashing needed.")
+                parts.append(
+                    lang.f(
+                        "Hash cache restored — %@ rows imported, no re-hashing needed.",
+                        result.hashCacheImported.formatted(.number)
+                    )
+                )
             }
         }
-        return parts.joined(separator: " ")
+        return parts.joined(separator: lang.isChinese ? "" : " ")
     }
 
     private func appearanceOverrideScheme(_ override: AppearanceOverride) -> ColorScheme? {
@@ -746,7 +768,7 @@ public struct CairnAppRoot: View {
                             let url = try await model.actions.exportData(scope)
                             exportedFileURL = url
                         } catch {
-                            model.lastError = "Export failed: \(error.localizedDescription)"
+                            model.lastError = lang.f("Export failed: %@", error.localizedDescription)
                         }
                     }
                 },
@@ -758,7 +780,7 @@ public struct CairnAppRoot: View {
                             let result = try await model.actions.importData(url, applySettings)
                             importResult = result
                         } catch {
-                            model.lastError = "Import failed: \(error.localizedDescription)"
+                            model.lastError = lang.f("Import failed: %@", error.localizedDescription)
                         }
                     }
                 },

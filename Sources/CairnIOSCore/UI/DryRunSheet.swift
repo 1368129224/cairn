@@ -46,6 +46,7 @@ public struct DryRunSheet: View {
     @State private var zoomedCandidate: CairnFixtures.CandidateFixture?
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
@@ -172,7 +173,7 @@ public struct DryRunSheet: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Close")
+                .accessibilityLabel(lang.t("Close"))
             }
             Text(headerTitle)
                 .font(.cairnScaled(size: 22, weight: .semibold))
@@ -190,24 +191,34 @@ public struct DryRunSheet: View {
     }
 
     private var headerTitle: String {
-        if tripped { return "\(candidates.count) candidates is above your cap" }
-        return "Trash \(candidates.count) on Immich?"
+        if tripped {
+            return lang.f("%@ candidates is above your cap", "\(candidates.count)")
+        }
+        return lang.f("Trash %@ on Immich?", "\(candidates.count)")
     }
 
     private var headerSubtitle: String {
-        if tripped { return "Nothing was touched. Review the photos before deciding." }
-        return "\(CairnTimeHelpers.formatBytes(totalBytes)) · stays in Immich's Trash for 30 days"
+        if tripped { return lang.t("Nothing was touched. Review the photos before deciding.") }
+        let bytesStr = CairnTimeHelpers.formatBytes(totalBytes)
+        return lang.f("%@ · stays in Immich's Trash for 30 days", bytesStr)
     }
 
     private var trippedBanner: some View {
         Callout(.danger, icon: "exclamationmark.triangle") {
             VStack(alignment: .leading, spacing: 2) {
-                Text(String(format: "%.2f%% of matched would be trashed", pct))
+                Text(lang.f("%.2f%% of matched would be trashed", pct))
                     .fontWeight(.semibold)
-                (Text("Your cap is ") + Text(String(format: "%.1f%%", maxDeletePercent)).bold()
-                    + Text(" (and ") + Text("\(minDeleteFloor)+").bold() + Text(" assets). ")
-                    + Text("Look through the grid — does it match what you deleted on your phone?"))
-                    .opacity(0.9).fixedSize(horizontal: false, vertical: true)
+                if lang.isChinese {
+                    (Text("你的上限为 ") + Text(String(format: "%.1f%%", maxDeletePercent)).bold()
+                        + Text("（且至少 ") + Text("\(minDeleteFloor)+").bold() + Text(" 项）。")
+                        + Text("请浏览下方照片网格 — 是否与你在手机上删除的一致？"))
+                        .opacity(0.9).fixedSize(horizontal: false, vertical: true)
+                } else {
+                    (Text("Your cap is ") + Text(String(format: "%.1f%%", maxDeletePercent)).bold()
+                        + Text(" (and ") + Text("\(minDeleteFloor)+").bold() + Text(" assets). ")
+                        + Text("Look through the grid — does it match what you deleted on your phone?"))
+                        .opacity(0.9).fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .padding(.horizontal, 16)
@@ -218,17 +229,17 @@ public struct DryRunSheet: View {
     private var summaryStrip: some View {
         CairnCard {
             HStack(spacing: 12) {
-                MiniStat(label: tripped ? "Over cap" : "Of matched",
+                MiniStat(label: lang.t(tripped ? "Over cap" : "Of matched"),
                          value: String(format: "%.2f%%", pct),
-                         sub: String(format: "cap %.1f%%", maxDeletePercent),
+                         sub: lang.f("cap %.1f%%", maxDeletePercent),
                          tone: tripped ? .danger : .neutral)
                 Rectangle().fill(t.divider).frame(width: 0.5)
-                MiniStat(label: "Live pairs", value: "\(livePairs)", sub: "still + motion")
+                MiniStat(label: lang.t("Live pairs"), value: "\(livePairs)", sub: lang.t("still + motion"))
                 Rectangle().fill(t.divider).frame(width: 0.5)
-                MiniStat(label: "Videos", value: "\(videoCount)")
+                MiniStat(label: lang.t("Videos"), value: "\(videoCount)")
                 Rectangle().fill(t.divider).frame(width: 0.5)
                 let bytesParts = CairnTimeHelpers.formatBytes(totalBytes).split(separator: " ")
-                MiniStat(label: "Freed",
+                MiniStat(label: lang.t("Freed"),
                          value: String(bytesParts.first ?? "0"),
                          sub: bytesParts.count > 1 ? String(bytesParts[1]) : nil)
             }
@@ -239,14 +250,14 @@ public struct DryRunSheet: View {
 
     private var sortStrip: some View {
         HStack {
-            Text("\(candidates.count) PHOTOS · TAP TO ZOOM")
+            Text(lang.f("%@ PHOTOS · TAP TO ZOOM", "\(candidates.count)"))
                 .font(.cairnScaled(size: 11, weight: .semibold))
                 .tracking(0.9)
                 .foregroundStyle(t.textHint)
             Spacer()
             HStack(spacing: 2) {
-                SegBtn(label: "Recent", active: sort == .recent) { sort = .recent }
-                SegBtn(label: "By type", active: sort == .type) { sort = .type }
+                SegBtn(label: lang.t("Recent"), active: sort == .recent) { sort = .recent }
+                SegBtn(label: lang.t("By type"), active: sort == .type) { sort = .type }
             }
             .padding(2)
             .background(t.bg)
@@ -280,8 +291,8 @@ public struct DryRunSheet: View {
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(
                             c.isLivePair
-                                ? "\(c.name), Live Photo. Candidate for trashing on Immich. Tap to zoom."
-                                : "\(c.name). Candidate for trashing on Immich. Tap to zoom."
+                                ? lang.f("%@, Live Photo. Candidate for trashing on Immich. Tap to zoom.", c.name)
+                                : lang.f("%@. Candidate for trashing on Immich. Tap to zoom.", c.name)
                         )
                     }
                 }
@@ -294,22 +305,22 @@ public struct DryRunSheet: View {
 
     private var safetyChecks: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("SAFETY CHECKS")
+            Text(lang.t("SAFETY CHECKS"))
                 .font(.cairnScaled(size: 11, weight: .semibold)).tracking(0.9)
                 .foregroundStyle(t.textHint)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 8)
             CairnCard {
                 VStack(spacing: 0) {
-                    CheckRow(label: String(format: "Under %.1f%% cap", maxDeletePercent), pass: !overPct)
+                    CheckRow(label: lang.f("Under %.1f%% cap", maxDeletePercent), pass: !overPct)
                     RowDivider()
-                    CheckRow(label: "Over \(minDeleteFloor)-asset floor", pass: overFloor)
+                    CheckRow(label: lang.f("Over %@-asset floor", "\(minDeleteFloor)"), pass: overFloor)
                     RowDivider()
-                    CheckRow(label: "Server returned > 0 assets", pass: library.server > 0)
+                    CheckRow(label: lang.t("Server returned > 0 assets"), pass: library.server > 0)
                     RowDivider()
-                    CheckRow(label: "Photos access is Full", pass: photoAccessIsFull)
+                    CheckRow(label: lang.t("Photos access is Full"), pass: photoAccessIsFull)
                     RowDivider()
-                    CheckRow(label: "Purview set populated", pass: library.matched > 0)
+                    CheckRow(label: lang.t("Purview set populated"), pass: library.matched > 0)
                 }
             }
             .padding(.bottom, 16)
@@ -340,12 +351,11 @@ public struct DryRunSheet: View {
 
     private var normalActions: some View {
         HStack(spacing: 10) {
-            ActionButton(label: "Not now", role: .secondary, action: onClose)
+            ActionButton(label: lang.t("Not now"), role: .secondary, action: onClose)
                 .frame(maxWidth: .infinity)
-            ActionButton(label: "Move \(candidates.count) to Trash", icon: "trash", role: .danger) {
+            ActionButton(label: lang.f("Move %@ to Trash", "\(candidates.count)"), icon: "trash", role: .danger) {
                 phase = .confirming
             }
-            .frame(maxWidth: .infinity)
             .frame(maxWidth: .infinity)
         }
     }
@@ -353,20 +363,13 @@ public struct DryRunSheet: View {
     private var trippedActions: some View {
         VStack(spacing: 8) {
             HStack(spacing: 10) {
-                ActionButton(label: "Cancel", role: .secondary, action: onClose)
+                ActionButton(label: lang.t("Cancel"), role: .secondary, action: onClose)
                     .frame(maxWidth: .infinity)
-                ActionButton(label: "Proceed anyway", icon: "exclamationmark.triangle", role: .primary) {
+                ActionButton(label: lang.t("Proceed anyway"), icon: "exclamationmark.triangle", role: .primary) {
                     phase = .confirming
                 }
                 .frame(maxWidth: .infinity)
-                .frame(maxWidth: .infinity)
             }
-            // The "Raise threshold to N% and retry" affordance used to live
-            // here with an empty action closure — a dead button on a
-            // safety-critical surface. The cap lives in Settings; raising
-            // it is a deliberate settings change, not a one-tap escape
-            // hatch on the confirmation sheet. Removed rather than left
-            // fake. (2026-06-09 review.)
         }
     }
 
@@ -374,19 +377,24 @@ public struct DryRunSheet: View {
         VStack(spacing: 12) {
             Callout(.danger, icon: "exclamationmark.triangle") {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Confirm once more").fontWeight(.semibold)
-                    (Text.cairnWord + Text(" will tag ") + Text("cairn/v1/run/…").font(.cairnScaled(size: 11.5, design: .monospaced))
-                        + Text(" then move \(candidates.count) asset\(candidates.count == 1 ? "" : "s") to Immich's Trash."))
-                        .opacity(0.9).fixedSize(horizontal: false, vertical: true)
+                    Text(lang.t("Confirm once more")).fontWeight(.semibold)
+                    if lang.isChinese {
+                        (Text.cairnWord + Text(" 将添加标签 ") + Text("cairn/v1/run/…").font(.cairnScaled(size: 11.5, design: .monospaced))
+                            + Text("，然后将 \(candidates.count) 项移入 Immich Trash。"))
+                            .opacity(0.9).fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        (Text.cairnWord + Text(" will tag ") + Text("cairn/v1/run/…").font(.cairnScaled(size: 11.5, design: .monospaced))
+                            + Text(" then move \(candidates.count) asset\(candidates.count == 1 ? "" : "s") to Immich's Trash."))
+                            .opacity(0.9).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
             HStack(spacing: 10) {
-                ActionButton(label: "Back", role: .secondary) { phase = .review }
+                ActionButton(label: lang.t("Back"), role: .secondary) { phase = .review }
                     .frame(maxWidth: .infinity)
-                ActionButton(label: "Yes, move \(candidates.count) to Trash", role: .danger) {
+                ActionButton(label: lang.f("Yes, move %@ to Trash", "\(candidates.count)"), role: .danger) {
                     runIt()
                 }
-                .frame(maxWidth: .infinity)
                 .frame(maxWidth: .infinity)
             }
         }
@@ -416,11 +424,11 @@ public struct DryRunSheet: View {
                 Circle().fill(t.surfaceAlt).frame(width: 48, height: 48)
                 ProgressView().tint(t.textBody)
             }
-            Text("Tagging and moving to Trash")
+            Text(lang.t("Tagging and moving to Trash"))
                 .font(.cairnScaled(size: 20, weight: .semibold))
                 .tracking(-0.3)
                 .foregroundStyle(t.text)
-            Text("Writing breadcrumb · \(candidates.count) assets")
+            Text(lang.f("Writing breadcrumb · %@ assets", "\(candidates.count)"))
                 .font(.cairnScaled(size: 13))
                 .foregroundStyle(t.textMuted)
         }
@@ -435,17 +443,25 @@ public struct DryRunSheet: View {
                     .font(.cairnScaled(size: 22, weight: .semibold))
                     .foregroundStyle(t.verifiedInk)
             }
-            Text("\(candidates.count) moved to Trash")
+            Text(lang.f("%@ moved to Trash", "\(candidates.count)"))
                 .font(.cairnScaled(size: 20, weight: .semibold))
                 .tracking(-0.3)
                 .foregroundStyle(t.text)
-            (Text("Tagged ") + Text("cairn/v1/run/…").font(.cairnScaled(size: 11.5, design: .monospaced)) + Text(". Recoverable in Immich's Trash for 30 days."))
-                .font(.cairnScaled(size: 13))
-                .foregroundStyle(t.textMuted)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 280)
+            if lang.isChinese {
+                (Text("已添加标签 ") + Text("cairn/v1/run/…").font(.cairnScaled(size: 11.5, design: .monospaced)) + Text("。可在 Immich Trash 中恢复，保留 30 天。"))
+                    .font(.cairnScaled(size: 13))
+                    .foregroundStyle(t.textMuted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 280)
+            } else {
+                (Text("Tagged ") + Text("cairn/v1/run/…").font(.cairnScaled(size: 11.5, design: .monospaced)) + Text(". Recoverable in Immich's Trash for 30 days."))
+                    .font(.cairnScaled(size: 13))
+                    .foregroundStyle(t.textMuted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 280)
+            }
 
-            ActionButton(label: "Back to status", role: .primary) {
+            ActionButton(label: lang.t("Back to status"), role: .primary) {
                 onClose()
             }
             .padding(.top, 8)
@@ -467,11 +483,12 @@ private struct ModeChip: View {
     let tripped: Bool
 
     @Environment(\.cairnTokens) private var t
+    @Environment(\.cairnLanguage) private var lang
 
     var body: some View {
         let (label, soft, ink): (String, Color, Color) = {
-            if tripped { return ("Tripped · review needed", t.dangerSoft, t.dangerInk) }
-            return ("Live · moves to Trash", t.dangerSoft.mix(with: t.danger, amount: 0.30), t.dangerInk)
+            if tripped { return (lang.t("Tripped · review needed"), t.dangerSoft, t.dangerInk) }
+            return (lang.t("Live · moves to Trash"), t.dangerSoft.mix(with: t.danger, amount: 0.30), t.dangerInk)
         }()
         return Text(label.uppercased())
             .font(.cairnScaled(size: 10, weight: .semibold))
